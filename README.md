@@ -300,10 +300,12 @@ runs two. The llama.cpp engine takes any number of RPC nodes. One request at a
 time: concurrent requests queue, and they add no throughput.
 Pipeline-model families only (see Requirements). `place` sizes stages from free
 memory only. On a 16 GB M1 on Omarchy, DeepSeek-Coder-V2-Lite-4bit (8.8 GB) failed
-to load whole with a Vulkan out-of-device-memory error (2026-10-11,
+to load whole with a Vulkan out-of-device-memory error once mlx held 8.07 GB, with
+5 GB of RAM still available (2026-10-11,
 [receipt](receipts/2026-10-11-single-host-baseline)); an earlier note here put the
-failure at about 8.5 GB of Vulkan allocations (2026-10-06, earlier build). The
-cause is open. Give such a node fewer layers with `--split`. Plain HTTP with one
+failure at about 8.5 GB (2026-10-06, earlier build). `place` does not see this
+limit: the driver reports a 16.2 GB heap, about twice it. Give such a node fewer
+layers with `--split`. Plain HTTP with one
 shared token on your LAN: a homelab trust model, no TLS, no per-user auth. A
 node slowed by other GPU work is detected and reported, not preempted.
 
