@@ -95,7 +95,7 @@ def _agent_env(tmp_path, monkeypatch, free_gib, probe, rank_running=False):
     monkeypatch.setattr(agent.facts_mod, "boot_id", lambda: "boot-1")
     monkeypatch.setattr(agent.facts_mod, "memory_free_bytes", lambda: free_gib * GIB)
     monkeypatch.setattr(agent.facts_mod, "memory_total_bytes", lambda: 16 * GIB)
-    monkeypatch.setattr(agent, "_rank_running", lambda: rank_running)
+    monkeypatch.setattr(agent, "_gpu_holder_running", lambda: rank_running)
     monkeypatch.setattr(agent.subprocess, "run", probe)
 
 
@@ -114,9 +114,78 @@ def test_agent_probe_leaves_the_requested_headroom_and_reprobes_a_floor(tmp_path
     assert len(probe.runs) == 2
 
 
-def test_agent_does_not_probe_while_a_rank_runs(tmp_path, monkeypatch):
+def test_agent_does_not_probe_while_a_gpu_holder_runs(tmp_path, monkeypatch):
     probe = _Probe({"alloc_cap_bytes": 8 * GIB, "stopped_at_limit": False})
     _agent_env(tmp_path, monkeypatch, 13, probe, rank_running=True)
     res = agent.gpu_cap({})
-    assert res["alloc_cap_bytes"] is None and "rank" in res["skipped"]
+    assert res["alloc_cap_bytes"] is None and "GPU-holding server" in res["skipped"]
     assert probe.runs == []
+
+
+def test_gpu_holder_scan_matches_ranks_and_the_rpc_llama_and_sushi_servers(tmp_path, monkeypatch):
+    procs = tmp_path / "proc"
+    for pid, cmdline in {"11": b"python\0-m\0omarchy_cluster.agent", "12": b"ggml-rpc-server\0-p\050060",
+                         "13": b"llama-server\0-m\0x.gguf"}.items():
+        (procs / pid).mkdir(parents=True)
+        (procs / pid / "cmdline").write_bytes(cmdline)
+    real_listdir, real_open = os.listdir, open
+    monkeypatch.setattr(agent.os, "listdir", lambda p: real_listdir(procs if p == "/proc" else p))
+    monkeypatch.setattr("builtins.open", lambda p, *a, **k: real_open(
+        str(p).replace("/proc/", str(procs) + "/"), *a, **k))
+    assert agent._gpu_holder_running()
+    (procs / "12" / "cmdline").write_bytes(b"idle")
+    (procs / "13" / "cmdline").write_bytes(b"idle")
+    assert not agent._gpu_holder_running()
+
+
+def test_rank_layer_cap_is_the_capped_figure_not_raw_free_memory(monkeypatch):
+    """The 13-inch M1: 12 GB free, GPU cap 7.5 GB. The rank's measured split must size its
+    layer cap from the cap, or the cap never reaches the engine."""
+    from omarchy_cluster import planner, rank
+    info = {"ref": "m", "path": "/x", "layers": 27, "hidden": 2048, "kv_heads": 16,
+            "head_dim": 128, "weights_bytes": int(8.8e9)}
+    monkeypatch.setattr(facts, "memory_free_bytes", lambda: int(12e9))
+    monkeypatch.setattr(facts, "cached_gpu_cap", lambda: int(7.5e9))
+    capped = rank._layer_cap(info)
+    monkeypatch.setattr(facts, "cached_gpu_cap", lambda: None)
+    raw = rank._layer_cap(info)
+    assert raw == planner.max_layers(int(12e9), info)
+    assert capped == planner.max_layers(int(7.5e9), info) and capped < raw
+
+
+def _stub_measured_split(monkeypatch, info, cap_bytes):
+    """Run rank._measured_split for one rank with mlx, the child process and the model
+    metadata stubbed, and the node's free memory and measured GPU cap set."""
+    import types
+    from omarchy_cluster import planner, rank
+
+    class Rows(list):
+        def tolist(self):
+            return list(self)
+
+    mx = types.ModuleType("mlx.core")
+    mx.float32 = None
+    mx.cpu = None
+    mx.array = lambda rows, dtype=None: Rows(rows)
+    mx.distributed = types.SimpleNamespace(all_gather=lambda a, group=None, stream=None: a)
+    pkg = types.ModuleType("mlx")
+    pkg.core = mx
+    monkeypatch.setitem(sys.modules, "mlx", pkg)
+    monkeypatch.setitem(sys.modules, "mlx.core", mx)
+    monkeypatch.setattr(planner, "model_info", lambda ref: info)
+    import subprocess
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: types.SimpleNamespace(stdout="5.0\n"))
+    monkeypatch.setattr(rank, "_fastest_layer_ms", lambda key, ms: ms)
+    monkeypatch.setattr(facts, "memory_free_bytes", lambda: int(12e9))
+    monkeypatch.setattr(facts, "cached_gpu_cap", lambda: cap_bytes)
+    return rank._measured_split("m", types.SimpleNamespace(rank=lambda: 0))
+
+
+def test_measured_split_refuses_a_model_the_gpu_cap_cannot_hold(monkeypatch):
+    import pytest
+    info = {"ref": "m", "path": "/x", "layers": 27, "hidden": 2048, "kv_heads": 16,
+            "head_dim": 128, "weights_bytes": int(8.8e9)}
+    split, _ = _stub_measured_split(monkeypatch, info, None)  # raw free memory: all 27 layers fit
+    assert split == [27]
+    with pytest.raises(RuntimeError, match="cannot hold 27 layers"):
+        _stub_measured_split(monkeypatch, info, int(7.5e9))  # GPU cap 7.5 GB: they do not

@@ -137,7 +137,11 @@ hold every layer. Usable memory is the node's free memory, and on a Vulkan GPU
 also the allocation limit its driver enforces, which its agent measures by
 allocating GPU blocks until the driver refuses (once per boot, cached). Free
 memory alone over-counts: the 13-inch M1 with 16 GB reports about 12 GB free and
-still runs out of GPU memory loading an 8.8 GB model. It prints each node's layer cap.
+still runs out of GPU memory loading an 8.8 GB model. The probe leaves 2 GiB of free
+RAM alone. If it reaches that limit before the driver refuses, the number is only a
+floor: `place` says so and uses free memory for that node. The probe does not run
+while a rank, an rpc-server, a llama-server or a sushi server is alive on the node.
+It prints each node's layer cap.
 
 The `serve MODEL` command plans, launches a pipeline rank on each node through
 its token-authed agent (no node-to-node ssh), and starts an OpenAI-compatible

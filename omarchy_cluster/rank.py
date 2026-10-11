@@ -129,6 +129,14 @@ def _fastest_layer_ms(key, ms, path="~/.local/state/omarchy-cluster/layer-ms.jso
     return best
 
 
+def _layer_cap(info):
+    """Decoder layers this node can hold: free memory, and on a Vulkan GPU the allocation
+    cap the agent measured on this boot (facts.cached_gpu_cap; a floor is not used)."""
+    from . import facts, planner
+    return planner.max_layers(planner.usable_bytes(
+        {"memory_free_bytes": facts.memory_free_bytes(), "gpu_alloc_cap_bytes": facts.cached_gpu_cap()}), info)
+
+
 def _measured_split(model_ref, group):
     """Every rank measures its ms per layer and its layer cap (free memory),
     all_gathers both, and runs planner.choose_split on the same numbers.
@@ -137,12 +145,11 @@ def _measured_split(model_ref, group):
     import subprocess
     import sys
     import mlx.core as mx
-    from . import facts, planner
+    from . import planner
     info = planner.model_info(model_ref)
     if not info:
         raise RuntimeError("model not in the local HF cache: %s" % model_ref)
-    cap = planner.max_layers(planner.usable_bytes(
-        {"memory_free_bytes": facts.memory_free_bytes(), "gpu_alloc_cap_bytes": facts.cached_gpu_cap()}), info)
+    cap = _layer_cap(info)
     out = subprocess.run(
         [sys.executable, "-c", "import sys; from mlx_lm.utils import load; "
          "from omarchy_cluster.rank import _layer_ms; print(_layer_ms(load(sys.argv[1], lazy=True)[0]))",

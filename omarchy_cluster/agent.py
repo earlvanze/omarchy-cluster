@@ -337,17 +337,37 @@ def rpc_start(req):
     return {"pid": pid, "log": log, "cmd": cmd, "env": sorted(extra)}
 
 
-def _rank_running():
-    """True when a pipeline rank is alive on this node (its GPU blocks would lower a probe)."""
+GPU_HOLDERS = (b"omarchy_cluster.rank", b"rpc-server", b"llama-server", b"sushi")
+
+
+def _gpu_holder_running():
+    """True when a process that holds GPU memory is alive on this node: a pipeline rank, a
+    llama.cpp rpc-server or llama-server, or a sushi server. Its blocks would lower a probe."""
     try:
         for pid in os.listdir("/proc"):
             if pid.isdigit() and pid != str(os.getpid()):
                 with open("/proc/%s/cmdline" % pid, "rb") as f:
-                    if b"omarchy_cluster.rank" in f.read():
-                        return True
+                    cmdline = f.read()
+                if any(h in cmdline for h in GPU_HOLDERS):
+                    return True
     except OSError:
         pass
     return False
+
+
+def _read_gpu_cap(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _cap_answers(cached, boot, spare_gib, fresh):
+    """A cached probe answers when it is from this boot, was not asked to refresh, and is
+    either a driver refusal or a floor reached with at least as many blocks as now allowed."""
+    return bool(cached and cached.get("boot_id") == boot and not fresh and (
+        not cached.get("stopped_at_limit") or cached.get("max_gib", 0) >= spare_gib))
 
 
 def gpu_cap(req=None):
@@ -359,36 +379,36 @@ def gpu_cap(req=None):
     field, default 6). When it reaches that limit before the driver refuses, the result
     carries stopped_at_limit and alloc_cap_bytes is only a floor. A cached floor is
     re-probed when a later request allows more blocks (max_gib). No probe runs while a
-    rank is alive on the node."""
+    GPU-holding server is alive on the node, and one probe at a time runs per node."""
+    import fcntl
     if sys.platform != "linux":
         return {"alloc_cap_bytes": None}
-    path = os.path.expanduser("~/.local/state/omarchy-cluster/gpu-cap.json")
+    path = os.path.expanduser(facts_mod.GPU_CAP_FILE)
     boot = facts_mod.boot_id()
     headroom = float((req or {}).get("headroom_gib", 6))
     spare_gib = max(1, int((facts_mod.memory_free_bytes() - headroom * (1 << 30)) // (1 << 30)))
-    cached = None
-    try:
-        with open(path) as f:
-            cached = json.load(f)
-    except (OSError, ValueError):
-        pass
     fresh = (req or {}).get("fresh")
-    if cached and cached.get("boot_id") == boot and not fresh and (
-            not cached.get("stopped_at_limit") or cached.get("max_gib", 0) >= spare_gib):
+    cached = _read_gpu_cap(path)
+    if _cap_answers(cached, boot, spare_gib, fresh):
         return cached
-    if _rank_running():
-        return {"alloc_cap_bytes": None, "skipped": "a rank is running on this node"}
-    env = dict(os.environ, HK_SYSMEM=str(facts_mod.memory_total_bytes()),
-               PYTHONPATH=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    p = subprocess.run([sys.executable, "-m", "omarchy_cluster.vkprobe", str(spare_gib)], env=env,
-                       capture_output=True, text=True, timeout=300)
-    if p.returncode:
-        return {"alloc_cap_bytes": None, "error": p.stderr.strip()[-300:]}
-    res = dict(json.loads(p.stdout), boot_id=boot, max_gib=spare_gib)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(res, f)
-    return res
+    with open(path + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        cached = _read_gpu_cap(path)  # another request may have probed while this one waited
+        if _cap_answers(cached, boot, spare_gib, fresh):
+            return cached
+        if _gpu_holder_running():
+            return {"alloc_cap_bytes": None, "skipped": "a GPU-holding server is running on this node"}
+        env = dict(os.environ, HK_SYSMEM=str(facts_mod.memory_total_bytes()),
+                   PYTHONPATH=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        p = subprocess.run([sys.executable, "-m", "omarchy_cluster.vkprobe", str(spare_gib)], env=env,
+                           capture_output=True, text=True, timeout=300)
+        if p.returncode:
+            return {"alloc_cap_bytes": None, "error": p.stderr.strip()[-300:]}
+        res = dict(json.loads(p.stdout), boot_id=boot, max_gib=spare_gib)
+        with open(path, "w") as f:
+            json.dump(res, f)
+        return res
 
 
 def rank_stop(req):
