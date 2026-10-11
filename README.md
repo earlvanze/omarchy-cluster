@@ -91,7 +91,7 @@ Metal). The laptops are MacBook Pros on Omarchy Linux (Vulkan).
 | M1 Max alone | | 27 | 2.45 tok/s (earlier omarchy-mlx build) |
 | M1 Max alone, 2026-10-11, current build | | 27 | median 15.73 tok/s (15.70 to 15.74, n = 3), 22-token reply, [receipt](receipts/2026-10-11-single-host-baseline) |
 | M1 13-inch 16 GB alone, 2026-10-11 | | 27 | does not load: out of GPU device memory ([receipt](receipts/2026-10-11-single-host-baseline)) |
-| M1 16 GB + M1 Max | 2.4 Gb/s wired | 1 + 26, chosen automatically | 1.79 and 1.80 tok/s, agree |
+| M1 16 GB + M1 Max, 2026-10-06, omarchy-cluster `c95baa0`, earlier omarchy-mlx build | 2.4 Gb/s wired | 1 + 26, chosen automatically | 1.79 and 1.80 tok/s, agree (no receipt directory; see [the 2026-10-11 receipt](receipts/2026-10-11-single-host-baseline)) |
 | Studio + M1 Max | Thunderbolt, 12 Gb/s | 26 + 1, chosen automatically | 46.4 and 48.0 tok/s, agree |
 | Studio + M2 Max, 2026-10-05 | 2.2 Gb/s wired | 26 + 1, chosen automatically | median 52.5 tok/s (52.2 to 55.4), agree |
 | same two machines | same | 14 + 13, a naive even split | 5.6 to 9.6 tok/s |

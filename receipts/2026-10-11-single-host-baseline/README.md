@@ -52,8 +52,15 @@ RAM and not the GPU's allocation limit. That check is wrong for this machine and
 
 ## What this does not show
 
-No split of this model across the two laptops has completed a request. On a 13 + 14 split, the live rank
-log on the 13-inch M1 showed its 13 layers loaded and the engine up at 10:06Z; that log was not saved, and
-the ticket reached its time cap before a request was sent. The planner's own split failed on the M1 Max
-side with a lost ring peer, and the 13-inch M1's rank log for that run was overwritten by the next run, so
-the cause is not recorded. A paired run that keeps the rank logs is queued.
+On the current build (omarchy-mlx wheel `93131d1b`, omarchy-cluster `3c82f0a`, 2026-10-11) no split of
+this model across the two laptops has completed a request. An earlier run did: on 2026-10-06, with
+omarchy-cluster at `c95baa0` and an earlier omarchy-mlx build, a 1 + 26 split over the M1 16 GB and the
+M1 Max completed requests at 1.79 and 1.80 tok/s and returned the same text as the M1 Max alone. That
+run is documented only in the main README's speed table and in the commit message that added its row
+(`cdded18`); this repository has no receipt directory for it.
+
+On the 2026-10-11 runs, a 13 + 14 split loaded its 13 layers on the 13-inch M1 and brought the engine up
+(seen in the live rank log at 10:06Z; that log was not saved), and the ticket reached its time cap before
+a request was sent. The planner's own split failed on the M1 Max side with a lost ring peer, and the
+13-inch M1's rank log for that run was overwritten by the next run, so the cause is not recorded. A paired
+run that keeps the rank logs is queued.
