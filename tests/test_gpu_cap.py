@@ -122,10 +122,19 @@ def test_agent_does_not_probe_while_a_gpu_holder_runs(tmp_path, monkeypatch):
     assert probe.runs == []
 
 
-def test_gpu_holder_scan_matches_ranks_and_the_rpc_llama_and_sushi_servers(tmp_path, monkeypatch):
+def test_gpu_holder_matches_the_program_not_a_substring():
+    holders = [b"/usr/bin/python3\0-m\0omarchy_cluster.rank\0--model\0m", b"ggml-rpc-server\0-p\050060",
+               b"/opt/llama/bin/llama-server\0-m\0x.gguf", b"/usr/local/bin/rpc-server\0-H\00.0.0.0",
+               b"/usr/bin/sushi-serve\0--port\08000", b"python3\0-u\0/srv/sushi-serve.py", b"python3\0-m\0sushi.serve"]
+    others = [b"python\0-m\0omarchy_cluster.agent", b"nvim\0/home/u/src/sushi/README.md",
+              b"tail\0-f\0/var/log/llama-server.log", b"less\0sushi-serve.log", b"bash\0run-rpc-server-test.sh", b""]
+    assert all(agent._is_gpu_holder(c) for c in holders)
+    assert not any(agent._is_gpu_holder(c) for c in others)
+
+
+def test_gpu_holder_scan_reads_proc(tmp_path, monkeypatch):
     procs = tmp_path / "proc"
-    for pid, cmdline in {"11": b"python\0-m\0omarchy_cluster.agent", "12": b"ggml-rpc-server\0-p\050060",
-                         "13": b"llama-server\0-m\0x.gguf"}.items():
+    for pid, cmdline in {"11": b"nvim\0sushi/README.md", "12": b"ggml-rpc-server\0-p\050060"}.items():
         (procs / pid).mkdir(parents=True)
         (procs / pid / "cmdline").write_bytes(cmdline)
     real_listdir, real_open = os.listdir, open
@@ -134,7 +143,6 @@ def test_gpu_holder_scan_matches_ranks_and_the_rpc_llama_and_sushi_servers(tmp_p
         str(p).replace("/proc/", str(procs) + "/"), *a, **k))
     assert agent._gpu_holder_running()
     (procs / "12" / "cmdline").write_bytes(b"idle")
-    (procs / "13" / "cmdline").write_bytes(b"idle")
     assert not agent._gpu_holder_running()
 
 

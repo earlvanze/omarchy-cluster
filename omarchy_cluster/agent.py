@@ -337,19 +337,35 @@ def rpc_start(req):
     return {"pid": pid, "log": log, "cmd": cmd, "env": sorted(extra)}
 
 
-GPU_HOLDERS = (b"omarchy_cluster.rank", b"rpc-server", b"llama-server", b"sushi")
+GPU_HOLDER_PROGRAMS = (b"rpc-server", b"ggml-rpc-server", b"llama-server")
+GPU_HOLDER_PREFIXES = (b"sushi",)
+
+
+def _is_gpu_holder(cmdline):
+    """Whether a /proc cmdline (NUL-separated argv) is a process that holds GPU memory: a
+    pipeline rank (`-m omarchy_cluster.rank`), a llama.cpp rpc-server or llama-server, or a
+    sushi server. Only the program (argv[0], or the script after an interpreter) is matched,
+    so an editor open on a sushi checkout or a tail of llama-server.log does not count."""
+    argv = [a for a in cmdline.split(b"\0") if a]
+    if b"omarchy_cluster.rank" in argv:
+        return True
+    if not argv:
+        return False
+    programs = [os.path.basename(argv[0])]
+    if programs[0].startswith((b"python", b"bash", b"sh")):  # an interpreter: its script or -m module
+        programs += [os.path.basename(a) for a in argv[1:] if not a.startswith(b"-")][:1]
+    return any(p in GPU_HOLDER_PROGRAMS or p.startswith(GPU_HOLDER_PREFIXES) for p in programs)
 
 
 def _gpu_holder_running():
-    """True when a process that holds GPU memory is alive on this node: a pipeline rank, a
-    llama.cpp rpc-server or llama-server, or a sushi server. Its blocks would lower a probe."""
+    """True when a process that holds GPU memory is alive on this node (see _is_gpu_holder).
+    Its blocks would lower a probe."""
     try:
         for pid in os.listdir("/proc"):
             if pid.isdigit() and pid != str(os.getpid()):
                 with open("/proc/%s/cmdline" % pid, "rb") as f:
-                    cmdline = f.read()
-                if any(h in cmdline for h in GPU_HOLDERS):
-                    return True
+                    if _is_gpu_holder(f.read()):
+                        return True
     except OSError:
         pass
     return False
