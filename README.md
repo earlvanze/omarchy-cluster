@@ -299,9 +299,11 @@ The MLX engine runs two ranks: the planner can plan more stages, but `serve`
 runs two. The llama.cpp engine takes any number of RPC nodes. One request at a
 time: concurrent requests queue, and they add no throughput.
 Pipeline-model families only (see Requirements). `place` sizes stages from free
-memory, not from the Vulkan allocation limit. On a 16 GB M1 on Omarchy, Vulkan
-allocations failed at about 8.5 GB, so DeepSeek-Coder-V2-Lite-4bit did not load
-there whole. Give such a node fewer layers with `--split`. Plain HTTP with one
+memory only. On a 16 GB M1 on Omarchy, DeepSeek-Coder-V2-Lite-4bit (8.8 GB) failed
+to load whole with a Vulkan out-of-device-memory error (2026-10-11,
+[receipt](receipts/2026-10-11-single-host-baseline)); an earlier note here put the
+failure at about 8.5 GB of Vulkan allocations (2026-10-06, earlier build). The
+cause is open. Give such a node fewer layers with `--split`. Plain HTTP with one
 shared token on your LAN: a homelab trust model, no TLS, no per-user auth. A
 node slowed by other GPU work is detected and reported, not preempted.
 
