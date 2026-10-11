@@ -59,6 +59,16 @@ def kv_bytes_per_token(info):
     return 2 * info["layers"] * info["kv_heads"] * info["head_dim"] * BYTES_PER_KV_ELEMENT
 
 
+def usable_bytes(node):
+    """Bytes a rank can put on this node: its free memory and, on a Vulkan GPU, the
+    allocation limit the driver enforces (gpu_alloc_cap_bytes, measured by the node's
+    agent). Free RAM alone over-counts: a 16 GB M1 reports 12 GB free and fails to
+    allocate an 8.8 GB model on its GPU."""
+    free = node["memory_free_bytes"]
+    cap = node.get("gpu_alloc_cap_bytes")
+    return min(free, cap) if cap else free
+
+
 def max_layers(free_bytes, info, ctx_tokens=DEFAULT_CTX_TOKENS):
     """Decoder layers (weights + KV for ctx_tokens) that fit in 90 % of free_bytes."""
     per_layer = (info["weights_bytes"] + kv_bytes_per_token(info) * ctx_tokens) / max(info["layers"], 1)
@@ -118,7 +128,7 @@ def plan_placement(nodes, links, info, ctx_tokens=DEFAULT_CTX_TOKENS, no_decode=
                 break
         if chosen is None:
             continue
-        caps = {n: max_layers(nodes[n]["memory_free_bytes"], info, ctx_tokens) for n in chosen}
+        caps = {n: max_layers(usable_bytes(nodes[n]), info, ctx_tokens) for n in chosen}
         if min(caps.values()) < 1 or sum(caps.values()) < L:
             continue
         stages = [{"node": n, "max_layers": min(caps[n], L - n_stages + 1)} for n in chosen]

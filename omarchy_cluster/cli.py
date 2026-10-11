@@ -284,15 +284,33 @@ def _hub_nodes(hub):
 
 # ---- place ----
 
+def _attach_gpu_caps(found, nodes):
+    """Set gpu_alloc_cap_bytes on each Vulkan node's facts from its agent (/v1/gpu-cap,
+    cached per boot on the node; the first call after a boot allocates GPU blocks to find
+    the limit). A node whose agent cannot answer keeps its free-memory figure."""
+    for name, f in nodes.items():
+        if f.get("gpu_backend") != "vulkan":
+            continue
+        try:
+            cap = _agent_post(found[name], "/v1/gpu-cap", {}, timeout=320).get("alloc_cap_bytes")
+        except (OSError, ValueError) as e:
+            print("  %s: no Vulkan allocation cap (%s); using free memory" % (name, e))
+            continue
+        if cap:
+            f["gpu_alloc_cap_bytes"] = cap
+
+
 def cmd_place(args):
     from . import planner
-    nodes = {n: d["facts"] for n, d in discover.discover_nodes().items() if d.get("facts")}
+    found = {n: d for n, d in discover.discover_nodes().items() if d.get("facts")}
+    nodes = {n: d["facts"] for n, d in found.items()}
     if getattr(args, "nodes", None):
         keep = {n.strip() for n in args.nodes.split(",") if n.strip()}
         missing = keep - set(nodes)
         if missing:
             sys.exit("node(s) not discovered: %s" % ", ".join(sorted(missing)))
         nodes = {n: d for n, d in nodes.items() if n in keep}
+    _attach_gpu_caps(found, nodes)
     links = probe_mod.load_links(args.links)
     if not links:
         sys.exit("no links.json; run omarchy-cluster probe first")

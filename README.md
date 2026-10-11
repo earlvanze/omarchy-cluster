@@ -132,8 +132,12 @@ reports `soft_transport: true`, and the pair record repeats it. Verbs numbers
 over such a device measure the kernel network stack, not an RDMA NIC.
 
 The `place MODEL` command checks that the model fits: every stage must hold at
-least one layer in 90 percent of its free memory, and all stages together must
-hold every layer. It prints each node's layer cap.
+least one layer in 90 percent of its usable memory, and all stages together must
+hold every layer. Usable memory is the node's free memory, and on a Vulkan GPU
+also the allocation limit its driver enforces, which its agent measures by
+allocating GPU blocks until the driver refuses (once per boot, cached). Free
+memory alone over-counts: the 13-inch M1 with 16 GB reports about 12 GB free and
+still runs out of GPU memory loading an 8.8 GB model. It prints each node's layer cap.
 
 The `serve MODEL` command plans, launches a pipeline rank on each node through
 its token-authed agent (no node-to-node ssh), and starts an OpenAI-compatible

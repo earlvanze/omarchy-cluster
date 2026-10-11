@@ -77,6 +77,37 @@ def test_infeasible_when_model_does_not_fit():
     assert plan["mode"] == "none"
 
 
+DEEPSEEK_LITE_4BIT = {"ref": "m", "path": "/x", "layers": 27, "hidden": 2048, "kv_heads": 16,
+                      "head_dim": 128, "weights_bytes": int(8.8e9)}
+
+
+def test_usable_bytes_takes_the_smaller_of_free_memory_and_the_gpu_cap():
+    assert planner.usable_bytes(facts(12, 16)) == int(12e9)
+    assert planner.usable_bytes({**facts(12, 16), "gpu_alloc_cap_bytes": int(7.5e9)}) == int(7.5e9)
+    assert planner.usable_bytes({**facts(12, 16), "gpu_alloc_cap_bytes": int(40e9)}) == int(12e9)
+    assert planner.usable_bytes({**facts(12, 16), "gpu_alloc_cap_bytes": None}) == int(12e9)
+
+
+def test_a_16_gb_laptop_is_refused_a_model_its_gpu_cannot_allocate():
+    """The 13-inch M1 with 16 GB reports about 12 GB free, so free memory alone says the 8.8 GB
+    DeepSeek-Coder-V2-Lite 4-bit fits. Its GPU stops allocating first (out of device memory at
+    engine boot, 2026-10-11), so the measured cap must refuse the single-stage plan."""
+    free_only = {"m1": facts(12, 16)}
+    capped = {"m1": {**facts(12, 16), "gpu_alloc_cap_bytes": int(7.5e9)}}
+    assert planner.plan_placement(free_only, links_with("m1", "m1"), DEEPSEEK_LITE_4BIT,
+                                  max_stages=1)["mode"] != "none"
+    assert planner.plan_placement(capped, links_with("m1", "m1"), DEEPSEEK_LITE_4BIT,
+                                  max_stages=1)["mode"] == "none"
+
+
+def test_the_gpu_cap_lowers_a_stage_but_a_split_still_fits():
+    nodes = {"m1": {**facts(12, 16), "gpu_alloc_cap_bytes": int(7.5e9)}, "max": facts(60, 64)}
+    plan = planner.plan_placement(nodes, links_with("m1", "max"), DEEPSEEK_LITE_4BIT)
+    assert plan["mode"] == "pipeline"
+    caps = {s["node"]: s["max_layers"] for s in plan["stages"]}
+    assert caps["m1"] < 24 and caps["m1"] >= 1
+
+
 def test_kv_bytes():
     assert planner.kv_bytes_per_token(INFO) == 2 * 28 * 8 * 128 * 2
 
