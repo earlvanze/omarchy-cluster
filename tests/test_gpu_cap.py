@@ -126,7 +126,7 @@ def test_gpu_holder_matches_the_program_not_a_substring():
     holders = [b"/usr/bin/python3\0-m\0omarchy_cluster.rank\0--model\0m", b"ggml-rpc-server\0-p\050060",
                b"/opt/llama/bin/llama-server\0-m\0x.gguf", b"/usr/local/bin/rpc-server\0-H\00.0.0.0",
                b"/usr/bin/sushi-serve\0--port\08000", b"python3\0-u\0/srv/sushi-serve.py", b"python3\0-m\0sushi.serve"]
-    others = [b"python\0-m\0omarchy_cluster.agent", b"nvim\0/home/u/src/sushi/README.md",
+    others = [b"python\0-m\0omarchy_cluster.agent", b"nvim\0/srv/src/sushi/README.md",
               b"tail\0-f\0/var/log/llama-server.log", b"less\0sushi-serve.log", b"bash\0run-rpc-server-test.sh", b""]
     assert all(agent._is_gpu_holder(c) for c in holders)
     assert not any(agent._is_gpu_holder(c) for c in others)
