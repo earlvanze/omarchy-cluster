@@ -46,9 +46,11 @@ RuntimeError: engine boot failed: RuntimeError: [omarchy] vkAllocateMemory faile
 ```
 
 A second run at 09:58Z also failed: its warm-up request got connection refused. Its rank log was not
-kept, so that run does not show the cause. The 8.8 GB model does not fit on the 13-inch M1's GPU on the
-one run that recorded it. `omarchy-cluster place` reports that all 27 layers fit, because it checks free
-RAM and not the GPU's allocation limit. That check is wrong for this machine and is open.
+kept, so that run does not show the cause. On the one run that recorded it, the 8.8 GB model failed to
+load on the 13-inch M1. `omarchy-cluster place` reports that all 27 layers fit, and it is wrong for this
+machine. The cause is open. A later probe (2026-10-11 15:54Z) allocated 10 GiB of Vulkan blocks on that
+GPU without the driver refusing, so the failure is not a GPU allocation limit that such a probe sees; load
+peak memory is the suspect and has not been measured.
 
 ## What this does not show
 
