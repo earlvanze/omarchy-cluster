@@ -89,13 +89,22 @@ Metal). The laptops are MacBook Pros on Omarchy Linux (Vulkan).
 |---|---|---|---|
 | Studio alone | | 27 | 68.2 and 67.6 tok/s |
 | M1 Max alone | | 27 | 2.45 tok/s (earlier omarchy-mlx build) |
-| M1 Max alone, 2026-10-11, current build | | 27 | median 15.73 tok/s (15.70 to 15.74, n = 3), 22-token reply, [receipt](receipts/2026-10-11-single-host-baseline) |
-| M1 13-inch 16 GB alone, 2026-10-11 | | 27 | does not load: out of GPU device memory ([receipt](receipts/2026-10-11-single-host-baseline)) |
+| M1 Max alone, 2026-10-11, current build | | 27 | median 15.73 tok/s (15.70 to 15.74, n = 3), 22-token reply; driver build `6543eeb7df7` on the laptops, wheel `0.32.4.dev202610102049+93131d1b`, [receipt](receipts/2026-10-11-single-host-baseline), [build](receipts/2026-10-11-driver-and-build) |
+| M1 13-inch 16 GB alone, 2026-10-11 | | 27 | does not load: out of GPU device memory; driver build `6543eeb7df7` on the laptops, wheel `0.32.4.dev202610102049+93131d1b`, [receipt](receipts/2026-10-11-single-host-baseline), [build](receipts/2026-10-11-driver-and-build) |
 | M1 16 GB + M1 Max, 2026-10-06, omarchy-cluster `c95baa0`, earlier omarchy-mlx build | 2.4 Gb/s wired | 1 + 26, chosen automatically | 1.79 and 1.80 tok/s, agree (no receipt directory; see [the 2026-10-11 receipt](receipts/2026-10-11-single-host-baseline)) |
 | Studio + M1 Max | Thunderbolt, 12 Gb/s | 26 + 1, chosen automatically | 46.4 and 48.0 tok/s, agree |
 | Studio + M2 Max, 2026-10-05 | 2.2 Gb/s wired | 26 + 1, chosen automatically | median 52.5 tok/s (52.2 to 55.4), agree |
 | same two machines | same | 14 + 13, a naive even split | 5.6 to 9.6 tok/s |
 | same two machines | same | 24 + 3 | 28.6 to 31.0 tok/s |
+
+Driver and build. The Mesa driver build recorded `6543eeb7df7` (commit
+`6543eeb7df702b6bcaa4e02a18425571305d4e05`) sat in the pinned ICD path on both laptops on 2026-10-11,
+with a byte-identical Honeykrisp ICD library, sha256
+`3546bcafe8ed3995d091debcc2fb00803087e0074a88d7ebfe681071c58e57d0`, checked after the runs and
+logged by the 13-inch M1 weight-load run. The runs' own logs record the pinned ICD, not the library
+bytes. The runs used the cluster rank venv with omarchy-mlx wheel
+`0.32.4.dev202610102049+93131d1b`, and the omarchy-cluster tree `3c82f0a` or a later docs-only
+commit. Details in [receipts/2026-10-11-driver-and-build](receipts/2026-10-11-driver-and-build).
 
 The ring exchange between machines costs under 0.5 ms per token. Almost all of
 a token's time is the layers on the slower node, which is why the planner puts

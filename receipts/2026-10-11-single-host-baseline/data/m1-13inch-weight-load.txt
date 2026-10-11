@@ -13,3 +13,5 @@ parameters 915 arrays, 8.84 GB
 Vulkan heap reported by the driver: 16223944704 bytes.
 vkprobe (1 GiB DEVICE_LOCAL blocks, up to 10 GiB) on this machine, run with the agent's default driver and with the
 driver the ranks use: both allocated all 10 GiB without a refusal (alloc_cap_bytes 10737418240, stopped_at_limit true).
+
+wheel mlx-omarchy 0.32.4.dev202610102049+93131d1b
