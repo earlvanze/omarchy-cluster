@@ -1,0 +1,15 @@
+13-inch M1 (16 GB), in-process weight load of mlx-community/DeepSeek-Coder-V2-Lite-Instruct-4bit,
+mlx-lm lazy load, then mx.eval in chunks of 64 arrays. omarchy-mlx wheel 0.32.4.dev202610102049+93131d1b.
+Guard ticket 2026-10-11 17:40Z. mlx counters from mx.get_active_memory and mx.get_peak_memory.
+
+12:41:12 start                        active 0.00 GB peak 0.00 GB MemAvailable 12.90 GB
+12:41:14 loaded lazy (not evaluated)  active 0.00 GB peak 0.01 GB MemAvailable 12.69 GB
+parameters 915 arrays, 8.84 GB
+12:41:14 eval 64/915 (0.50 GB)        active 0.50 GB peak 0.50 GB MemAvailable 12.26 GB
+12:41:16 eval 448/915 (4.12 GB)       active 4.13 GB peak 4.13 GB MemAvailable 8.82 GB
+12:41:19 eval 832/915 (8.05 GB)       active 8.06 GB peak 8.06 GB MemAvailable 5.19 GB
+12:41:19 FAILED                       active 8.07 GB peak 8.07 GB MemAvailable 5.09 GB ERROR [omarchy] vkAllocateMemory failed: VK_ERROR_OUT_OF_DEVICE_MEMORY (request=92274688 bytes; cache released)
+
+Vulkan heap reported by the driver: 16223944704 bytes.
+vkprobe (1 GiB DEVICE_LOCAL blocks, up to 10 GiB) on this machine, run with the agent's default driver and with the
+driver the ranks use: both allocated all 10 GiB without a refusal (alloc_cap_bytes 10737418240, stopped_at_limit true).

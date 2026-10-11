@@ -48,9 +48,15 @@ RuntimeError: engine boot failed: RuntimeError: [omarchy] vkAllocateMemory faile
 A second run at 09:58Z also failed: its warm-up request got connection refused. Its rank log was not
 kept, so that run does not show the cause. On the one run that recorded it, the 8.8 GB model failed to
 load on the 13-inch M1. `omarchy-cluster place` reports that all 27 layers fit, and it is wrong for this
-machine. The cause is open. A later probe (2026-10-11 15:54Z) allocated 10 GiB of Vulkan blocks on that
-GPU without the driver refusing, so the failure is not a GPU allocation limit that such a probe sees; load
-peak memory is the suspect and has not been measured.
+machine.
+
+A later run (17:40Z) loaded the weights in-process in chunks and recorded mlx's memory counters
+([data](data/m1-13inch-weight-load.txt)). The load failed with the same `vkAllocateMemory` error when mlx had
+8.07 GB allocated (8.84 GB of parameters in total), about half of the 16.2 GB Vulkan heap the driver reports.
+At that moment 5.09 GB of RAM was still available, and mlx's peak equalled its active memory, so the failure
+is neither the machine running out of RAM nor a transient double copy while loading. A separate probe that
+allocates 1 GiB Vulkan blocks went to 10 GiB without a refusal, under the agent's default driver and under the
+driver the ranks use, so that probe does not see this limit. What sets the roughly 8 GB limit is not known.
 
 ## What this does not show
 
