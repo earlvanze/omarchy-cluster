@@ -345,9 +345,11 @@ def _is_gpu_holder(cmdline):
     """Whether a /proc cmdline (NUL-separated argv) is a process that holds GPU memory: a
     pipeline rank (`-m omarchy_cluster.rank`), a llama.cpp rpc-server or llama-server, or a
     sushi server. Only the program (argv[0], or the script after an interpreter) is matched,
-    so an editor open on a sushi checkout or a tail of llama-server.log does not count."""
+    so an editor open on a sushi checkout or a tail of llama-server.log does not count.
+    Wrappers (env, nice, taskset, systemd-run, sh -c, python -X dev) hide the program and
+    are not seen."""
     argv = [a for a in cmdline.split(b"\0") if a]
-    if b"omarchy_cluster.rank" in argv:
+    if any(prev == b"-m" and arg == b"omarchy_cluster.rank" for prev, arg in zip(argv, argv[1:])):
         return True
     if not argv:
         return False
