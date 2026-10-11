@@ -155,6 +155,23 @@ def boot_id():
         return ""
 
 
+GPU_CAP_FILE = "~/.local/state/omarchy-cluster/gpu-cap.json"
+
+
+def cached_gpu_cap():
+    """The Vulkan allocation cap the agent measured on this boot, or None when there is
+    none or it is only a floor (the probe stopped at its block limit before the driver
+    refused). Never probes: the probe allocates GPU blocks, so only the agent runs it."""
+    try:
+        with open(os.path.expanduser(GPU_CAP_FILE)) as f:
+            cached = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if cached.get("boot_id") != boot_id() or cached.get("stopped_at_limit"):
+        return None
+    return cached.get("alloc_cap_bytes") or None
+
+
 def _prefix_from_netmask_hex(hexstr):
     try:
         return bin(int(hexstr, 16)).count("1")

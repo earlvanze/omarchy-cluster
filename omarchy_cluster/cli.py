@@ -285,18 +285,30 @@ def _hub_nodes(hub):
 # ---- place ----
 
 def _attach_gpu_caps(found, nodes):
-    """Set gpu_alloc_cap_bytes on each Vulkan node's facts from its agent (/v1/gpu-cap,
-    cached per boot on the node; the first call after a boot allocates GPU blocks to find
-    the limit). A node whose agent cannot answer keeps its free-memory figure."""
+    """Set gpu_alloc_cap_bytes on each Vulkan node's facts from its agent (/v1/gpu-cap).
+    The agent caches the measurement per boot; the first call after a boot allocates GPU
+    blocks until the driver refuses (up to free RAM less 2 GiB here) and can take minutes.
+    A result that stopped at the block limit is only a floor and is not used. A node whose
+    agent cannot answer, answers with no cap, or is running a rank keeps its free-memory
+    figure, with a line saying why."""
     for name, f in nodes.items():
         if f.get("gpu_backend") != "vulkan":
             continue
+        print("  %s: asking its agent for the GPU allocation cap (the first probe after a boot "
+              "allocates GPU blocks)" % name, flush=True)
         try:
-            cap = _agent_post(found[name], "/v1/gpu-cap", {}, timeout=320).get("alloc_cap_bytes")
+            res = _agent_post(found[name], "/v1/gpu-cap", {"headroom_gib": 2}, timeout=320)
         except (OSError, ValueError) as e:
             print("  %s: no Vulkan allocation cap (%s); using free memory" % (name, e))
             continue
-        if cap:
+        cap = res.get("alloc_cap_bytes")
+        if not cap:
+            print("  %s: the agent reported no Vulkan allocation cap (%s); using free memory"
+                  % (name, res.get("error") or res.get("skipped") or "no reason given"))
+        elif res.get("stopped_at_limit"):
+            print("  %s: the allocation probe stopped at %.1f GiB before the driver refused, so "
+                  "that is a floor, not the cap; using free memory" % (name, cap / (1 << 30)))
+        else:
             f["gpu_alloc_cap_bytes"] = cap
 
 

@@ -337,30 +337,54 @@ def rpc_start(req):
     return {"pid": pid, "log": log, "cmd": cmd, "env": sorted(extra)}
 
 
+def _rank_running():
+    """True when a pipeline rank is alive on this node (its GPU blocks would lower a probe)."""
+    try:
+        for pid in os.listdir("/proc"):
+            if pid.isdigit() and pid != str(os.getpid()):
+                with open("/proc/%s/cmdline" % pid, "rb") as f:
+                    if b"omarchy_cluster.rank" in f.read():
+                        return True
+    except OSError:
+        pass
+    return False
+
+
 def gpu_cap(req=None):
     """Bytes one process can allocate on this node's Vulkan GPU (vkprobe), cached per
     boot. Run with HK_SYSMEM at the machine's RAM so the address space, not the heap
-    setting, is what stops it. {"alloc_cap_bytes": None} where there is no such GPU."""
+    setting, is what stops it. {"alloc_cap_bytes": None} where there is no such GPU.
+
+    The probe allocates blocks up to the node's free RAM less `headroom_gib` (request
+    field, default 6). When it reaches that limit before the driver refuses, the result
+    carries stopped_at_limit and alloc_cap_bytes is only a floor. A cached floor is
+    re-probed when a later request allows more blocks (max_gib). No probe runs while a
+    rank is alive on the node."""
     if sys.platform != "linux":
         return {"alloc_cap_bytes": None}
     path = os.path.expanduser("~/.local/state/omarchy-cluster/gpu-cap.json")
     boot = facts_mod.boot_id()
+    headroom = float((req or {}).get("headroom_gib", 6))
+    spare_gib = max(1, int((facts_mod.memory_free_bytes() - headroom * (1 << 30)) // (1 << 30)))
+    cached = None
     try:
         with open(path) as f:
             cached = json.load(f)
-        if cached.get("boot_id") == boot and not (req or {}).get("fresh"):
-            return cached
     except (OSError, ValueError):
         pass
+    fresh = (req or {}).get("fresh")
+    if cached and cached.get("boot_id") == boot and not fresh and (
+            not cached.get("stopped_at_limit") or cached.get("max_gib", 0) >= spare_gib):
+        return cached
+    if _rank_running():
+        return {"alloc_cap_bytes": None, "skipped": "a rank is running on this node"}
     env = dict(os.environ, HK_SYSMEM=str(facts_mod.memory_total_bytes()),
                PYTHONPATH=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    # never push the node past its headroom: blocks beyond free RAM take real memory
-    spare_gib = max(1, int((facts_mod.memory_free_bytes() - 6_000_000_000) // (1 << 30)))
     p = subprocess.run([sys.executable, "-m", "omarchy_cluster.vkprobe", str(spare_gib)], env=env,
                        capture_output=True, text=True, timeout=300)
     if p.returncode:
         return {"alloc_cap_bytes": None, "error": p.stderr.strip()[-300:]}
-    res = dict(json.loads(p.stdout), boot_id=boot)
+    res = dict(json.loads(p.stdout), boot_id=boot, max_gib=spare_gib)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         json.dump(res, f)

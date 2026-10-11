@@ -141,7 +141,8 @@ def _measured_split(model_ref, group):
     info = planner.model_info(model_ref)
     if not info:
         raise RuntimeError("model not in the local HF cache: %s" % model_ref)
-    cap = planner.max_layers(facts.memory_free_bytes(), info)
+    cap = planner.max_layers(planner.usable_bytes(
+        {"memory_free_bytes": facts.memory_free_bytes(), "gpu_alloc_cap_bytes": facts.cached_gpu_cap()}), info)
     out = subprocess.run(
         [sys.executable, "-c", "import sys; from mlx_lm.utils import load; "
          "from omarchy_cluster.rank import _layer_ms; print(_layer_ms(load(sys.argv[1], lazy=True)[0]))",
