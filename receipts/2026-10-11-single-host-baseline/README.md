@@ -9,9 +9,12 @@ happens on the 13-inch M1.
 - Model: `mlx-community/DeepSeek-Coder-V2-Lite-Instruct-4bit`, 27 layers, 8.8 GB of weights.
 - Machines: MacBook Pro 16-inch M1 Max (64 GB) and MacBook Pro 13-inch M1 (16 GB), both Omarchy Linux,
   Vulkan through omarchy-mlx.
-- Software: omarchy-mlx wheel `0.32.4.dev202610102049+93131d1b`, mlx-lm `0.31.4.dev132`. omarchy-cluster
-  is the tree at `3c82f0a`: the run log records a SHA-256 over the package's `.py` files (sorted by path)
-  of `bd6e3b22828d3db8`, and the same hash computed on a checkout of `3c82f0a` matches. The same wheel and
+- Software: the cluster rank venv (a separate venv from the laptops' main one), omarchy-mlx wheel
+  `0.32.4.dev202610102049+93131d1b`, mlx-lm `0.31.4.dev132`; the main venv on each laptop held
+  `0.32.4.dev202610111010+4ba8fff` that day. omarchy-cluster is the tree at `3c82f0a` or a later
+  docs-only commit: the run log records a SHA-256 over the package's `.py` files (sorted by path)
+  of `bd6e3b22828d3db8`, and the same hash computed on a checkout of `3c82f0a` matches (the hash
+  covers only the package `.py` files). The same wheel and
   the same weights (two safetensors files of 5316545548 and 3523543836 bytes) are on both machines.
 - Run: `omarchy-cluster serve MODEL --nodes NODE --stages 1`, one rank, gateway on the same machine.
   One warm-up request of 8 tokens, then three requests, temperature 0, `max_tokens` 64, prompt "Write a
