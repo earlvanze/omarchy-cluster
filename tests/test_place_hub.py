@@ -118,11 +118,12 @@ def test_stored_one_way_pin_is_replaced_by_the_best_two_way_route():
     assert (route["a_iface"], route["a_ip"]) == ("en0", "10.0.0.1")
 
 
-def test_stored_one_way_pin_with_no_two_way_route_fails_closed():
+def test_stored_one_way_pin_with_no_two_way_route_fails_closed(monkeypatch):
     nodes = {"a": facts(100, 128), "b": facts(80, 94)}
     assert planner.plan_placement(nodes, stale_links(with_wired=False), INFO, max_stages=2)["mode"] == "none"
     assert planner.pinned_route(stale_links(with_wired=False), "a", "b") is None
-    with pytest.raises(SystemExit):
+    monkeypatch.setattr(cli.probe_mod, "load_links", lambda *a, **k: stale_links(with_wired=False))
+    with pytest.raises(SystemExit, match="both directions"):
         cli._pick_route_ip({"facts": {"interfaces": []}}, [{"node": "a"}, {"node": "b"}], "a")
 
 
