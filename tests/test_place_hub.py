@@ -2,9 +2,11 @@ import json
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from omarchy_cluster import planner
+from omarchy_cluster import cli, planner
 from omarchy_cluster.hub import Registry
 
 
@@ -91,3 +93,50 @@ def test_hub_registry_marks_out():
     reg.last["a"] = (t.monotonic() - 10, 5)
     assert reg.nodes()["a"]["up"] is False
     assert reg.up_names() == set()
+
+
+def stored_route(a_iface, a_ip, a2b, b2a, rtt):
+    return {"a_node": "a", "b_node": "b", "a_iface": a_iface, "a_ip": a_ip, "b_iface": "en1", "b_ip": "10.0.0.2",
+            "gbps_a2b": a2b, "gbps_b2a": b2a, "rtt_tcp_ms": rtt, "eligible_for_decode": True}
+
+
+def stale_links(with_wired=True):
+    """A links.json written before probe.measured_gbps required both directions: the pin is the
+    idle-bridge route whose reverse blast failed (the route set recorded on two laptops)."""
+    bridge = stored_route("docker0", "172.17.0.1", 2.017, None, 0.39)
+    routes = [bridge] + ([stored_route("en0", "10.0.0.1", 2.017, 1.992, 0.27)] if with_wired else [])
+    return {"pairs": [{"a": "a", "b": "b", "routes": routes, "pinned": bridge}]}
+
+
+def test_stored_one_way_pin_is_replaced_by_the_best_two_way_route():
+    nodes = {"a": facts(100, 128), "b": facts(80, 94)}
+    plan = planner.plan_placement(nodes, stale_links(), INFO, max_stages=2)
+    assert plan["mode"] == "pipeline"
+    assert plan["boundaries"][0]["route"].startswith("en0:10.0.0.1")
+    assert plan["boundaries"][0]["gbps"] == 1.992
+    route = planner.pinned_route(stale_links(), "a", "b")
+    assert (route["a_iface"], route["a_ip"]) == ("en0", "10.0.0.1")
+
+
+def test_stored_one_way_pin_with_no_two_way_route_fails_closed():
+    nodes = {"a": facts(100, 128), "b": facts(80, 94)}
+    assert planner.plan_placement(nodes, stale_links(with_wired=False), INFO, max_stages=2)["mode"] == "none"
+    assert planner.pinned_route(stale_links(with_wired=False), "a", "b") is None
+    with pytest.raises(SystemExit):
+        cli._pick_route_ip({"facts": {"interfaces": []}}, [{"node": "a"}, {"node": "b"}], "a")
+
+
+def test_a_two_way_route_on_a_bridge_is_still_pinned(monkeypatch):
+    # The rule is both directions measured, not an interface name list.
+    bridge = stored_route("docker0", "172.17.0.1", 2.0, 1.9, 0.2)
+    links = {"pairs": [{"a": "a", "b": "b", "routes": [bridge], "pinned": bridge}]}
+    assert planner.pinned_route(links, "a", "b") is bridge
+    monkeypatch.setattr(cli.probe_mod, "load_links", lambda *a, **k: links)
+    assert cli._pick_route_ip({"facts": {"interfaces": []}}, [{"node": "a"}, {"node": "b"}], "a") == "172.17.0.1"
+
+
+def test_ring_address_follows_the_two_way_route_for_a_stale_stored_pin(monkeypatch):
+    monkeypatch.setattr(cli.probe_mod, "load_links", lambda *a, **k: stale_links())
+    stages = [{"node": "a"}, {"node": "b"}]
+    assert cli._pick_route_ip({"facts": {"interfaces": []}}, stages, "a") == "10.0.0.1"
+    assert cli._pick_route_ip({"facts": {"interfaces": []}}, stages, "b") == "10.0.0.2"

@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 
+from . import probe
+
 BYTES_PER_KV_ELEMENT = 2  # KV stays fp16/bf16 even for 4-bit weights
 DEFAULT_CTX_TOKENS = 2048
 
@@ -80,11 +82,17 @@ def choose_split(layer_ms, caps, n_layers):
     return split
 
 
-def _pinned_route(links, a, b):
+def pinned_route(links, a, b):
+    """The route between two nodes that carried traffic in both directions, else None.
+    A stored pin that lacks one direction (written before probe.measured_gbps required both)
+    is dropped and the pair's stored routes are ranked again."""
     for pair in links.get("pairs", []):
         names = {pair.get("a"), pair.get("b")}
         if names == {a, b}:
-            return pair.get("pinned")
+            stored = pair.get("pinned")
+            if stored and probe.measured_gbps(stored) > 0:
+                return stored
+            return probe.pin_pair(pair.get("routes", []))
     return None
 
 
@@ -125,11 +133,11 @@ def plan_placement(nodes, links, info, ctx_tokens=DEFAULT_CTX_TOKENS, no_decode=
         ok = True
         boundaries = []
         for i in range(n_stages - 1):
-            route = _pinned_route(links, stages[i]["node"], stages[i + 1]["node"])
-            if not route or not (route.get("gbps_a2b") or route.get("gbps_b2a")):
+            route = pinned_route(links, stages[i]["node"], stages[i + 1]["node"])
+            if not route:
                 ok = False
                 break
-            gbps = min(v for v in (route.get("gbps_a2b"), route.get("gbps_b2a")) if v)
+            gbps = probe.measured_gbps(route)
             act_bytes = 2 * info["hidden"] * 2  # 1 token, bf16 hidden states
             rtt = route.get("rtt_tcp_ms") or 0.0
             boundaries.append({

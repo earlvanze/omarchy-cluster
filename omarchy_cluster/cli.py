@@ -826,16 +826,19 @@ def cmd_guard(args):
 
 def _pick_route_ip(node_facts_dict, stages, node_name):
     """IP of `node` on the pinned route to the other stage's node."""
+    from . import planner
     others = [s["node"] for s in stages if s["node"] != node_name]
     if others:
         links = probe_mod.load_links() or {}  # no probe run yet: use the node's first address
-        for pair in links.get("pairs", []):
-            if {pair.get("a"), pair.get("b")} == {node_name, others[0]}:
-                p = pair.get("pinned") or {}
-                if p.get("a_node") == node_name:
-                    return p["a_ip"]
-                if p.get("b_node") == node_name:
-                    return p["b_ip"]
+        if any({pair.get("a"), pair.get("b")} == {node_name, others[0]} for pair in links.get("pairs", [])):
+            p = planner.pinned_route(links, node_name, others[0])
+            if p is None:
+                sys.exit("no route between %s and %s carried traffic in both directions; "
+                         "run omarchy-cluster probe" % (node_name, others[0]))
+            if p.get("a_node") == node_name:
+                return p["a_ip"]
+            if p.get("b_node") == node_name:
+                return p["b_ip"]
     facts = node_facts_dict["facts"]
     for ifc in facts["interfaces"]:
         for a in ifc["ips"]:
