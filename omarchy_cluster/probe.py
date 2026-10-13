@@ -170,11 +170,13 @@ def _builtin_round(s_ip, s_port, r_ip, r_port, bind, dst, seconds, route, fwd):
 
 
 def measured_gbps(route):
+    """Bottleneck Gb/s over both directions; 0.0 unless BOTH were measured. The ring needs a path
+    that carries traffic each way, and a route whose reverse blast failed (a source address the peer
+    cannot reach back, such as an idle bridge) is not usable however fast its one good direction ran."""
     a2b, b2a = route.get("gbps_a2b"), route.get("gbps_b2a")
-    vals = [v for v in (a2b, b2a) if v]
-    if not vals:
+    if not a2b or not b2a:
         return 0.0
-    return min(vals)
+    return min(a2b, b2a)
 
 
 def rank_routes(routes):

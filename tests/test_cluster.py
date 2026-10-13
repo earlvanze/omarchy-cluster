@@ -86,6 +86,17 @@ def test_unmeasured_routes_never_pinned():
     assert probe.pin_pair([dead, live])["b_iface"] == "eno1"
 
 
+def test_route_with_one_dead_direction_is_never_pinned():
+    # An idle bridge address is reachable one way only: it answers the forward blast from the peer's
+    # side but the reverse blast never arrives. It must lose to a route that carries both directions,
+    # even when its one good direction and its RTT look better.
+    one_way = route(ifc("docker0", "172.17.0.1"), ETH_B, a2b=2.017, b2a=None, tcp=0.39)
+    both_ways = route(ETH_A, ETH_B, a2b=2.017, b2a=1.992, tcp=0.27)
+    assert probe.measured_gbps(one_way) == 0.0
+    assert probe.pin_pair([one_way, both_ways])["a_iface"] == "en0"
+    assert probe.pin_pair([one_way]) is None
+
+
 def test_bottleneck_metric_uses_min_direction():
     r = route(ETH_A, ETH_B, a2b=2.36, b2a=0.05)
     assert probe.measured_gbps(r) == 0.05
