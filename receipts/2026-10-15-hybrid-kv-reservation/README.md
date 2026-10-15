@@ -42,6 +42,10 @@ max_layers at free 56 GiB, ctx 2048: 62 of 64; ctx 32768: 60
 | layers that fit (of 64) in 40 GiB free, 2048 / 32768 tokens | 44 / 38 | 44 / 42 |
 | layers that fit (of 64) in 56 GiB free, 2048 / 32768 tokens | 61 / 53 | 62 / 60 |
 
+`max_layers` charges the KV of n layers for the n contiguous layers that hold the most attention layers (a stage owns a contiguous slice, and
+the attention layers are every fourth layer), so a one-layer stage that lands on an attention layer is charged a whole layer's KV. For this
+model the rows below are the same as with a model-wide average.
+
 At the default 2048-token context the cap moves by at most one layer, because the weights dominate. It matters for long contexts. The 48
 linear-attention layers keep a fixed-size recurrent state per sequence instead of a per-token cache; the planner does not add that state and
 I did not measure its size.

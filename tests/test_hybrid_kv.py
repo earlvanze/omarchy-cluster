@@ -58,7 +58,7 @@ def test_model_info_leaves_a_dense_model_unchanged(tmp_path):
 def test_hybrid_reservation_lets_more_layers_fit_at_a_long_context(tmp_path):
     info = write_model(tmp_path, qwen35_text(), nested=True)
     info["weights_bytes"] = 28 * GB  # 27B at 8 bit
-    all_layers = dict(info, kv_layers=None)  # what the planner reserved before
+    all_layers = dict(info, kv_layers=None, kv_pattern=None)  # what the planner reserved before
     free = 40 * GB
     ctx = 131072
     assert planner.max_layers(free, info, ctx) > planner.max_layers(free, all_layers, ctx)
@@ -70,3 +70,18 @@ def test_plan_table_says_how_many_layers_hold_a_cache():
     assert "(64 layers, 16 with KV, KV 64.0 KB/token)" in planner.plan_table(plan)
     plain = dict(plan, kv_layers=64)
     assert "(64 layers, KV 64.0 KB/token)" in planner.plan_table(plain)
+
+
+def test_worst_slice_of_attention_layers():
+    pattern = planner.attention_pattern(qwen35_text())
+    assert [planner.worst_attention_layers(pattern, n) for n in (1, 3, 4, 5, 8, 64)] == [1, 1, 1, 2, 2, 16]
+
+
+def test_a_stage_is_charged_for_its_most_attention_heavy_slice():
+    # 8 layers, an attention layer every fourth; 1 KV head of dim 1 -> 4 bytes per attention layer per token
+    info = {"layers": 8, "kv_heads": 1, "head_dim": 1, "weights_bytes": 0, "kv_layers": 2,
+            "kv_pattern": [True, False, False, False] * 2}
+    free = 3000 / 0.9  # budget of 3000 bytes at 1000 tokens: 0.75 of one attention layer (4000 bytes)
+    assert planner.max_layers(free, dict(info, kv_pattern=None), 1000) == 3  # the model-wide average: 0.25 layer each
+    assert planner.max_layers(free, info, 1000) == 0  # but one layer can be the attention layer
+    assert planner.max_layers(4000 / 0.9, info, 1000) == 4  # four layers hold one attention layer, five can hold two
