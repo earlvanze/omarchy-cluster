@@ -142,7 +142,11 @@ over such a device measure the kernel network stack, not an RDMA NIC.
 
 The `place MODEL` command checks that the model fits: every stage must hold at
 least one layer in 90 percent of its free memory, and all stages together must
-hold every layer. It prints each node's layer cap.
+hold every layer. It prints each node's layer cap. A layer's share is its
+weights plus the KV cache for the planned context. In a hybrid model (Qwen3.5,
+Qwen3.8, Qwen3-Next) only the full-attention layers grow a per-token cache, so
+the planner reserves KV for those layers only: 16 of 64 on Qwen3.8-27B, 64 KiB
+per token instead of 256 KiB.
 
 The `serve MODEL` command plans, launches a pipeline rank on each node through
 its token-authed agent (no node-to-node ssh), and starts an OpenAI-compatible

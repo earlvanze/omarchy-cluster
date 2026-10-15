@@ -34,6 +34,28 @@ def find_model_path(model_ref):
     return None
 
 
+def attention_pattern(tc):
+    """One flag per decoder layer: True when the layer grows a per-token KV cache.
+
+    Hybrid checkpoints (qwen3_next, qwen3_5) mix them with linear-attention layers, which keep a
+    fixed-size recurrent state instead. `layer_types` names every layer; without it mlx-lm makes every
+    `full_attention_interval`-th layer a full-attention layer. Anything unclear flags every layer, which
+    over-reserves rather than under-reserves."""
+    total = int(tc.get("num_hidden_layers", 0))
+    types = tc.get("layer_types")
+    if isinstance(types, list) and len(types) == total and all(isinstance(t, str) for t in types):
+        pattern = [t != "linear_attention" for t in types]
+    else:
+        interval = int(tc.get("full_attention_interval") or 0)
+        pattern = [(i + 1) % interval == 0 for i in range(total)] if interval > 1 else [True] * total
+    return pattern if any(pattern) else [True] * total
+
+
+def attention_layers(tc):
+    """Decoder layers that grow a per-token KV cache."""
+    return sum(attention_pattern(tc))
+
+
 def model_info(model_ref):
     path = find_model_path(model_ref)
     if not path:
@@ -53,17 +75,41 @@ def model_info(model_ref):
         "kv_heads": int(tc.get("num_key_value_heads", tc.get("num_attention_heads", 0))),
         "head_dim": int(tc.get("head_dim", 0) or
                         (tc.get("hidden_size", 0) // max(tc.get("num_attention_heads", 1), 1))),
+        "kv_layers": attention_layers(tc),
+        "kv_pattern": attention_pattern(tc),
         "weights_bytes": weights,
     }
 
 
 def kv_bytes_per_token(info):
-    return 2 * info["layers"] * info["kv_heads"] * info["head_dim"] * BYTES_PER_KV_ELEMENT
+    """Per-token KV bytes of the whole model: only the attention layers grow a cache."""
+    return 2 * (info.get("kv_layers") or info["layers"]) * info["kv_heads"] * info["head_dim"] * BYTES_PER_KV_ELEMENT
+
+
+def worst_attention_layers(pattern, n):
+    """Most attention layers that any n contiguous layers of the model can hold."""
+    best = cur = sum(pattern[:n])
+    for i in range(n, len(pattern)):
+        cur += pattern[i] - pattern[i - n]
+        best = max(best, cur)
+    return best
 
 
 def max_layers(free_bytes, info, ctx_tokens=DEFAULT_CTX_TOKENS):
-    """Decoder layers (weights + KV for ctx_tokens) that fit in 90 % of free_bytes."""
-    per_layer = (info["weights_bytes"] + kv_bytes_per_token(info) * ctx_tokens) / max(info["layers"], 1)
+    """Decoder layers (weights + KV for ctx_tokens) that fit in 90 % of free_bytes.
+
+    A pipeline stage owns contiguous layers, and in a hybrid model their attention layers are not spread evenly,
+    so the KV of n layers is charged for the n contiguous layers that hold the most attention layers."""
+    layers = max(info["layers"], 1)
+    pattern = info.get("kv_pattern")
+    if pattern and len(pattern) == info["layers"]:
+        per_attention = 2 * info["kv_heads"] * info["head_dim"] * BYTES_PER_KV_ELEMENT * ctx_tokens
+        budget = free_bytes * 0.9
+        for n in range(layers, 0, -1):
+            if n * info["weights_bytes"] / layers + per_attention * worst_attention_layers(pattern, n) <= budget:
+                return n
+        return 0
+    per_layer = (info["weights_bytes"] + kv_bytes_per_token(info) * ctx_tokens) / layers
     return int(free_bytes * 0.9 // per_layer)
 
 
@@ -151,6 +197,7 @@ def plan_placement(nodes, links, info, ctx_tokens=DEFAULT_CTX_TOKENS, no_decode=
             continue
         plan = {"mode": "pipeline" if n_stages > 1 else "replica",
                 "model": info["ref"], "layers": L, "ctx_tokens": ctx_tokens,
+                "kv_layers": info.get("kv_layers") or L,
                 "kv_bytes_per_token": kv_tok,
                 "decode_tail": stages[-1]["node"],
                 "stages": stages, "boundaries": boundaries}
@@ -165,8 +212,10 @@ def plan_placement(nodes, links, info, ctx_tokens=DEFAULT_CTX_TOKENS, no_decode=
 def plan_table(plan):
     if plan["mode"] == "none":
         return "NO PLAN: %s" % plan.get("reason")
-    lines = ["%s: %s (%d layers, KV %.1f KB/token)"
-             % (plan["mode"].upper(), plan["model"], plan["layers"],
+    kv_layers = plan.get("kv_layers", plan["layers"])
+    held = "" if kv_layers == plan["layers"] else ", %d with KV" % kv_layers
+    lines = ["%s: %s (%d layers%s, KV %.1f KB/token)"
+             % (plan["mode"].upper(), plan["model"], plan["layers"], held,
                 plan["kv_bytes_per_token"] / 1024)]
     for i, s in enumerate(plan["stages"]):
         lines.append("  rank %d  %-16s fits up to %d layers%s"
