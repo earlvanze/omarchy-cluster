@@ -34,6 +34,23 @@ def find_model_path(model_ref):
     return None
 
 
+def attention_layers(tc):
+    """Decoder layers that grow a per-token KV cache.
+
+    Hybrid checkpoints (qwen3_next, qwen3_5) mix them with linear-attention layers, which keep a
+    fixed-size recurrent state instead. `layer_types` names every layer; without it mlx-lm makes every
+    `full_attention_interval`-th layer a full-attention layer. Anything unclear counts every layer, which
+    over-reserves rather than under-reserves."""
+    total = int(tc.get("num_hidden_layers", 0))
+    types = tc.get("layer_types")
+    if isinstance(types, list) and len(types) == total and all(isinstance(t, str) for t in types):
+        full = sum(t != "linear_attention" for t in types)
+    else:
+        interval = int(tc.get("full_attention_interval") or 0)
+        full = total // interval if interval > 1 else total
+    return full if 0 < full <= total else total
+
+
 def model_info(model_ref):
     path = find_model_path(model_ref)
     if not path:
@@ -53,12 +70,14 @@ def model_info(model_ref):
         "kv_heads": int(tc.get("num_key_value_heads", tc.get("num_attention_heads", 0))),
         "head_dim": int(tc.get("head_dim", 0) or
                         (tc.get("hidden_size", 0) // max(tc.get("num_attention_heads", 1), 1))),
+        "kv_layers": attention_layers(tc),
         "weights_bytes": weights,
     }
 
 
 def kv_bytes_per_token(info):
-    return 2 * info["layers"] * info["kv_heads"] * info["head_dim"] * BYTES_PER_KV_ELEMENT
+    """Per-token KV bytes of the whole model: only the attention layers grow a cache."""
+    return 2 * (info.get("kv_layers") or info["layers"]) * info["kv_heads"] * info["head_dim"] * BYTES_PER_KV_ELEMENT
 
 
 def max_layers(free_bytes, info, ctx_tokens=DEFAULT_CTX_TOKENS):
@@ -151,6 +170,7 @@ def plan_placement(nodes, links, info, ctx_tokens=DEFAULT_CTX_TOKENS, no_decode=
             continue
         plan = {"mode": "pipeline" if n_stages > 1 else "replica",
                 "model": info["ref"], "layers": L, "ctx_tokens": ctx_tokens,
+                "kv_layers": info.get("kv_layers") or L,
                 "kv_bytes_per_token": kv_tok,
                 "decode_tail": stages[-1]["node"],
                 "stages": stages, "boundaries": boundaries}
@@ -165,8 +185,10 @@ def plan_placement(nodes, links, info, ctx_tokens=DEFAULT_CTX_TOKENS, no_decode=
 def plan_table(plan):
     if plan["mode"] == "none":
         return "NO PLAN: %s" % plan.get("reason")
-    lines = ["%s: %s (%d layers, KV %.1f KB/token)"
-             % (plan["mode"].upper(), plan["model"], plan["layers"],
+    kv_layers = plan.get("kv_layers", plan["layers"])
+    held = "" if kv_layers == plan["layers"] else ", %d with KV" % kv_layers
+    lines = ["%s: %s (%d layers%s, KV %.1f KB/token)"
+             % (plan["mode"].upper(), plan["model"], plan["layers"], held,
                 plan["kv_bytes_per_token"] / 1024)]
     for i, s in enumerate(plan["stages"]):
         lines.append("  rank %d  %-16s fits up to %d layers%s"
