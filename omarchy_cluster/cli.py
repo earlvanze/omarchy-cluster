@@ -371,14 +371,15 @@ def _first_ip(node):
 
 def _explicit_plan(args):
     """--nodes in rank order plus --split: no links file and no placement search. Rank r is nodes[r] and runs split[r] layers; rank 0
-    runs the last layers. Each node must hold its layers in its free memory."""
+    runs the last layers. A node may appear more than once (one rank per process: a Vulkan process maps about 60 GiB, so a large laptop
+    needs two ranks); the layers of all its ranks must fit its free memory together."""
     from . import planner
     names = [n.strip() for n in args.nodes.split(",") if n.strip()]
     counts = [int(c) for c in args.split.split(",")]
-    if len(names) != len(counts) or len(set(names)) != len(names):
-        sys.exit("--nodes and --split need one entry per rank and no node twice")
+    if len(names) != len(counts):
+        sys.exit("--nodes and --split need one entry per rank")
     found = {n: d["facts"] for n, d in discover.discover_nodes().items() if d.get("facts")}
-    missing = [n for n in names if n not in found]
+    missing = sorted({n for n in names if n not in found})
     if missing:
         sys.exit("node(s) not discovered: %s" % ", ".join(missing))
     info = planner.model_info(args.model)
@@ -391,9 +392,12 @@ def _explicit_plan(args):
         cap = planner.max_layers(found[name]["memory_free_bytes"], info, args.ctx)
         first = sum(counts[r + 1:])
         print("rank %d  %-16s layers %d-%d (%d), free memory holds %d" % (r, name, first, first + count - 1, count, cap))
-        if count > cap:
-            sys.exit("%s: %d layers do not fit its free memory (it holds %d)" % (name, count, cap))
         stages.append({"node": name, "max_layers": cap})
+    for name in dict.fromkeys(names):
+        held = sum(c for n, c in zip(names, counts) if n == name)
+        cap = next(s["max_layers"] for s in stages if s["node"] == name)
+        if held > cap:
+            sys.exit("%s: %d layers do not fit its free memory (it holds %d)" % (name, held, cap))
     return {"mode": "pipeline" if len(stages) > 1 else "replica", "model": info["ref"], "layers": info["layers"],
             "ctx_tokens": args.ctx, "stages": stages, "boundaries": [], "decode_tail": names[0]}
 
@@ -436,8 +440,13 @@ def cmd_serve(args):
         else:
             cand = _pick_route_ip(node, stages, s["node"])
         rank_ips.append(cand)
+    seen = {}
+    entries = []
+    for s, ip in zip(stages, rank_ips):
+        entries.append(["%s:%d" % (ip, 52100 + seen.get(s["node"], 0))])
+        seen[s["node"]] = seen.get(s["node"], 0) + 1
     with open(hostfile, "w") as f:
-        json.dump([["%s:%d" % (ip, 52100)] for ip in rank_ips], f)
+        json.dump(entries, f)
     print("ring hostfile: %s" % rank_ips)
     with open(hostfile) as f:
         hostfile_content = f.read()
