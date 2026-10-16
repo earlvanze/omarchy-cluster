@@ -1,0 +1,22 @@
+00:53:47 rpc-server up at <lan>:50060
+00:53:47 rpc-server up at <lan>:50061
+00:54:30 rpc-server up at <link>:50060
+00:54:30 swap at start 10938 MB, free 77 percent
+00:54:30 serve pid 37409 (log ~/run/serve.log)
+01:08:47 llama-server healthy after 857 s
+01:08:47 request 1: raw /completion, canary prompt, 32 tokens
+01:10:01 request 1 done:    72.26s  ' '    72.82s  '391'  TEXT:  391 SUMMARY tokens=2 ttft_s=72.259 decode_tok_s=None stop=eos server_timings={"cache_n": 0, "prompt_n": 161, "prompt_ms": 72241.229, "prompt_per_token_ms": 448.70328571428576, "prompt_per_second": 2.2286442552077843, "predicted_n": 3, "predicted_ms": 939.303, "predicted_per_token_ms": 469.6515, "predicted_per_second": 2.129238382076923} 
+01:10:01 request 2: raw /completion, canary prompt, 32 tokens
+01:10:28 request 2 done:    26.75s  ' '    27.06s  '391'  TEXT:  391 SUMMARY tokens=2 ttft_s=26.753 decode_tok_s=None stop=eos server_timings={"cache_n": 0, "prompt_n": 161, "prompt_ms": 26742.797, "prompt_per_token_ms": 166.10432919254657, "prompt_per_second": 6.020312684570728, "predicted_n": 3, "predicted_ms": 622.093, "predicted_per_token_ms": 311.0465, "predicted_per_second": 3.214953391213211} 
+01:10:28 request 3: raw /completion, canary prompt, 32 tokens
+01:10:55 request 3 done:    25.97s  ' '    26.28s  '391'  TEXT:  391 SUMMARY tokens=2 ttft_s=25.974 decode_tok_s=None stop=eos server_timings={"cache_n": 0, "prompt_n": 161, "prompt_ms": 25968.26, "prompt_per_token_ms": 161.2935403726708, "prompt_per_second": 6.199876310542178, "predicted_n": 3, "predicted_ms": 597.933, "predicted_per_token_ms": 298.9665, "predicted_per_second": 3.34485636350561} 
+01:10:55 done: ~/run (server left running; stop with: omarchy-cluster stop)
+01:18:17 code-isprime start
+01:19:19 code-isprime done:         i += 6     return True ``` SUMMARY tokens=107 ttft_s=26.709 decode_tok_s=3.035 stop=eos server_timings={"cache_n": 0, "prompt_n": 158, "prompt_ms": 26703.888, "prompt_per_token_ms": 169.0119493670886, "prompt_per_second": 5.916741412336661, "predicted_n": 108, "predicted_ms": 35234.432, "predicted_per_token_ms": 329.2937570093458, "predicted_per_second": 3.0368021825923006} 
+01:19:19 factual-capital start
+01:19:47 factual-capital done:    27.78s  '.'  TEXT: The capital of Australia is Canberra. SUMMARY tokens=7 ttft_s=25.815 decode_tok_s=3.052 stop=eos server_timings={"cache_n": 0, "prompt_n": 159, "prompt_ms": 25810.052, "prompt_per_token_ms": 162.3273710691824, "prompt_per_second": 6.160390533114772, "predicted_n": 8, "predicted_ms": 2299.057, "predicted_per_token_ms": 328.43671428571423, "predicted_per_second": 3.044726598775063} 
+01:19:47 canary-repeat start
+01:20:14 canary-repeat done:    26.17s  '391'  TEXT:  391 SUMMARY tokens=2 ttft_s=25.861 decode_tok_s=None stop=eos server_timings={"cache_n": 0, "prompt_n": 161, "prompt_ms": 25856.477, "prompt_per_token_ms": 160.5992360248447, "prompt_per_second": 6.226679682618789, "predicted_n": 3, "predicted_ms": 620.945, "predicted_per_token_ms": 310.4725, "predicted_per_second": 3.220897180909742} 
+01:20:14 reasoning-canary start
+01:22:14 reasoning-canary done: We should ensure we don't add any hidden reasoning.  We should just output the number SUMMARY tokens=300 ttft_s=25.456 decode_tok_s=3.168 stop=limit server_timings={"cache_n": 0, "prompt_n": 158, "prompt_ms": 25331.235, "prompt_per_token_ms": 160.32427215189873, "prompt_per_second": 6.237358739121879, "predicted_n": 300, "predicted_ms": 94372.573, "predicted_per_token_ms": 315.6273344481605, "predicted_per_second": 3
+01:22:14 quality done

@@ -1,0 +1,10 @@
+   25.81s  'The'
+   26.13s  ' capital'
+   26.45s  ' of'
+   26.75s  ' Australia'
+   27.06s  ' is'
+   27.41s  ' Canberra'
+   27.78s  '.'
+
+TEXT: The capital of Australia is Canberra.
+SUMMARY tokens=7 ttft_s=25.815 decode_tok_s=3.052 stop=eos server_timings={"cache_n": 0, "prompt_n": 159, "prompt_ms": 25810.052, "prompt_per_token_ms": 162.3273710691824, "prompt_per_second": 6.160390533114772, "predicted_n": 8, "predicted_ms": 2299.057, "predicted_per_token_ms": 328.43671428571423, "predicted_per_second": 3.044726598775063}

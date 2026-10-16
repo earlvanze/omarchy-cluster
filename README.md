@@ -279,6 +279,47 @@ omarchy-cluster serve ~/models/model-00001-of-00004.gguf --engine llamacpp \
   --rpc-binary linux-a=$HOME/src/llama.cpp/build/bin/ggml-rpc-server
 ```
 
+## Quickstart: a model that no machine can hold (Muse Spark Open, GGUF)
+
+Muse Spark Open 816B-A42B has a 175.6 GB GGUF (`unsloth/Muse-Spark-Open-816B-A42B-GGUF`, `UD-IQ1_S`). This is the route that was measured: three
+machines, one endpoint, 3.04 tokens per second over 107 tokens. The numbers and the layer-to-node map are in
+[receipts/2026-10-16-muse-spark-llamacpp-rpc](receipts/2026-10-16-muse-spark-llamacpp-rpc). It is a GGUF route through llama.cpp, not an MLX route.
+
+1. Put the five shard files on the gateway machine's own disk. The gateway reads its layers by mmap, so the other machines need no copy.
+2. Build llama.cpp with the Muse architecture (pull request 30616, merged into llama.cpp master) on the gateway and on every node, with RPC and the
+   backend of each machine: `-DGGML_RPC=ON` plus `-DGGML_VULKAN=ON` on an Omarchy Linux Mac, `-DGGML_METAL=ON` on macOS. Every machine needs the same
+   commit.
+3. Start `ggml-rpc-server` on each node. On an Omarchy Linux Mac, set `HK_SYSMEM` (bytes). Honeykrisp sizes its GPU heap at half of RAM by default, and
+   one process maps about 63 GiB at most, so a node with more memory than that runs two servers on two ports:
+
+   ```sh
+   HK_SYSMEM=45000000000 ggml-rpc-server -H NODE_IP -p 50060 &
+   HK_SYSMEM=45000000000 ggml-rpc-server -H NODE_IP -p 50061 &
+   ```
+
+   The server has no authentication. Bind it to one address on a network you trust.
+4. On the gateway, serve (the script in the receipt wraps this command):
+
+   ```sh
+   omarchy-cluster serve /models/Muse-Spark-Open-816B-A42B-UD-IQ1_S-00001-of-00005.gguf --engine llamacpp \
+     --llama-server ~/src/llama.cpp/build/bin/llama-server --host-layers 13 \
+     --rpc-node NODE_A:50060=43 --rpc-node NODE_A:50061=43 --rpc-node NODE_B:50060=54 --ctx 2048 \
+     --llama-arg=--no-warmup --llama-arg=-fa --llama-arg=on --llama-arg=-ub --llama-arg=128 --llama-arg=-b --llama-arg=128
+   ```
+
+   `=GB` is each node's budget in GB. The planner puts whole 2.8 GB layers in order and prints the map. Loading took 857 seconds in the receipt's run.
+5. Ask for a short answer. The model reasons before it answers unless the prompt starts the answer channel. The receipt's `prompts/` directory holds
+   rendered prompts that end `<|start|>assistant to=user<|message|>`:
+
+   ```sh
+   curl -s http://127.0.0.1:8032/completion -H 'Content-Type: application/json' \
+     -d "$(python3 -c 'import json,sys; print(json.dumps({"prompt": open(sys.argv[1]).read(), "n_predict": 32, "temperature": 0, "cache_prompt": False}))' \
+     receipts/2026-10-16-muse-spark-llamacpp-rpc/prompts/canary.low.direct.txt)"
+   ```
+
+   Port 8032 is the llama-server that the engine starts (the engine itself listens on 8031, the gateway on 8020). The reply text for the canary prompt is
+   ` 391`. The gateway on :8020 speaks chat completions.
+
 ## OpenAI-compatible endpoint
 
 The gateway speaks chat completions on `http://gateway-node:8020/v1`. With
