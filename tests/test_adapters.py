@@ -1,6 +1,8 @@
 """register_adapters: the omarchy-mlx Muse adapter is found through OMARCHY_MLX_SERVE and registered before a rank loads a model."""
 import sys
 
+import pytest
+
 from omarchy_cluster import adapters
 
 
@@ -40,3 +42,14 @@ def test_a_missing_package_is_not_an_error(monkeypatch):
     monkeypatch.delenv("OMARCHY_MLX_SERVE", raising=False)
     monkeypatch.setitem(sys.modules, "mlx_omarchy_muse", None)  # makes `import mlx_omarchy_muse` raise ImportError
     assert adapters.register_adapters() is False
+
+
+def test_a_missing_dependency_inside_the_adapter_is_not_hidden(tmp_path, monkeypatch):
+    pkg = tmp_path / "mlx_omarchy_muse"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("import a_module_that_does_not_exist_anywhere\n")
+    monkeypatch.setenv("OMARCHY_MLX_SERVE", str(tmp_path))
+    monkeypatch.delitem(sys.modules, "mlx_omarchy_muse", raising=False)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    with pytest.raises(ModuleNotFoundError, match="a_module_that_does_not_exist_anywhere"):
+        adapters.register_adapters()

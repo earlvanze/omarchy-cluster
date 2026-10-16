@@ -16,6 +16,8 @@ def register_adapters():
         sys.path.insert(0, serve)
     try:
         import mlx_omarchy_muse
-    except ImportError:
+    except ModuleNotFoundError as e:
+        if e.name != "mlx_omarchy_muse":  # the package is there but one of its own imports is missing: say so
+            raise
         return False
     return bool(mlx_omarchy_muse.register())
