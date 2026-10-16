@@ -1,0 +1,5 @@
+   26.75s  ' '
+   27.06s  '391'
+
+TEXT:  391
+SUMMARY tokens=2 ttft_s=26.753 decode_tok_s=None stop=eos server_timings={"cache_n": 0, "prompt_n": 161, "prompt_ms": 26742.797, "prompt_per_token_ms": 166.10432919254657, "prompt_per_second": 6.020312684570728, "predicted_n": 3, "predicted_ms": 622.093, "predicted_per_token_ms": 311.0465, "predicted_per_second": 3.214953391213211}

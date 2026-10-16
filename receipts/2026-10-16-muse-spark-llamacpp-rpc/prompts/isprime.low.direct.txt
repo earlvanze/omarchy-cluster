@@ -1,0 +1,15 @@
+<|start|>system<|message|>You are a helpful AI assistant.
+
+Knowledge cutoff: 2026-01-04.
+
+Current date: 2026-10-15.
+
+Reasoning strength: 8.
+
+Use the appropriate recipient for each message:
+
+- "self": private reasoning and tool planning.
+- "commentary": user-visible intermediate updates while the assistant will continue working, including messages sent to the user before or between tool calls.
+- "user": messages that end the assistant turn, such as a completed response or clarification question that waits for the user's reply; do not use for pre-tool updates or partial responses.
+
+# Valid recipients: "self", "commentary", "user".<|eot|><|start|>user<|message|>Write a Python function is_prime(n). Code only.<|eot|><|start|>assistant to=user<|message|>
