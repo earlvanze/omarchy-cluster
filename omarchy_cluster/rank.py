@@ -385,7 +385,10 @@ class Engine:
             raise RuntimeError("engine boot failed: %s" % self._error)
 
     def _generate(self, messages, max_tokens, timing=False):
-        prompt = self.tok.apply_chat_template(messages, add_generation_prompt=True)
+        if isinstance(messages, str):
+            prompt = self.tok.encode(messages, add_special_tokens=False)
+        else:
+            prompt = self.tok.apply_chat_template(messages, add_generation_prompt=True)
         marks = [] if timing or self._watch else None
         with self._cond:
             self._id += 1
@@ -519,6 +522,8 @@ class EngineHandler(BaseHTTPRequestHandler):
             return self._json(400, {"error": str(e)})
         messages = req.get("messages") or [{"role": "user",
                                             "content": req.get("prompt", "")}]
+        if req.get("raw") and isinstance(req.get("prompt"), str):
+            messages = req["prompt"]
         res = self.engine.generate(messages, max_tokens=int(req.get("max_tokens", 64)),
                                    timing=bool(req.get("timing")))
         return self._json(200, res)

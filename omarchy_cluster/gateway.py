@@ -58,7 +58,7 @@ class Gateway(BaseHTTPRequestHandler):
             return self._json(400, {"error": str(e)})
         payload = {"prompt": req.get("prompt"), "messages": req.get("messages"),
                    "max_tokens": int(req.get("max_tokens", 64)), "greedy": True,
-                   "timing": bool(req.get("timing"))}
+                   "timing": bool(req.get("timing")), "raw": bool(req.get("raw"))}
         if req.get("temperature", 0) not in (0, None):
             return self._json(400, {"error": "gateway serves temperature 0 only"})
         data = json.dumps(payload).encode()

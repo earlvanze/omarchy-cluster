@@ -266,6 +266,11 @@ curl -s http://127.0.0.1:8020/v1/chat/completions \
        "max_tokens":64,"temperature":0}'
 ```
 
+The MLX engine applies the model's chat template to `messages`, and to `prompt` too. Send `"raw": true` with a `prompt` string (to `/v1/completions`) to skip the
+template: the engine tokenizes exactly that text, without adding special tokens, and both ranks get the same ids. Use it when the prompt must end on
+text the template does not produce, such as `<|start|>assistant to=user<|message|>` for Muse Spark Open, whose template has no switch for the answer channel.
+The engine adds no beginning-of-text token, so a raw prompt must carry its own: a Muse Spark Open prompt begins with the literal text `<|begin_of_text|>`.
+
 Stop everything with `omarchy-cluster stop`. Logs are in
 `~/.local/share/omarchy-cluster/`: `gateway.log` on the gateway machine,
 `rank0.log` and `rank1.log` on each node.
