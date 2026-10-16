@@ -203,6 +203,12 @@ The model must be one mlx-lm can pipeline: the deepseek_v2/v3, glm4_moe,
 glm4_moe_lite and ministral3 families. qwen2/qwen3 are not pipeline models
 upstream; run those on one node (`--stages 1`).
 
+The published mlx-community Muse Spark Open checkpoints declare `model_type` `muse_spark`, which mlx-lm main does not load. omarchy-mlx carries a loader
+for it in `serve/mlx_omarchy_muse` (the class of mlx-lm pull request 1975, plain `mx` operations). Point every rank at it with
+`OMARCHY_MLX_SERVE=<omarchy-mlx checkout>/serve` in the agent's environment; each rank then registers the adapter before it loads the model. Nothing
+changes when the variable is unset or the package is absent. The checkpoints are 359 GB (3-bit) and 462 GB (4-bit): a split needs that much memory in
+total, and the Vulkan `gather_qmm` of omarchy-mlx runs 4-bit and 8-bit weights only.
+
 ## Install
 
 One command per node. Use a venv that persists: the agent starts from it at

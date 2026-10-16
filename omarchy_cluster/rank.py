@@ -63,6 +63,8 @@ def _pipeline_split(self, group, counts):
 def _sharded_load(model_ref, group, counts=None):
     """Load this rank's layers. Returns model, tokenizer, the split, and each
     rank's measured ms/layer (None when the split was given)."""
+    from .adapters import register_adapters
+    register_adapters()
     from mlx_lm.models.pipeline import PipelineMixin
     from mlx_lm.utils import sharded_load
     layer_ms = None
@@ -143,7 +145,8 @@ def _measured_split(model_ref, group):
         raise RuntimeError("model not in the local HF cache: %s" % model_ref)
     cap = planner.max_layers(facts.memory_free_bytes(), info)
     out = subprocess.run(
-        [sys.executable, "-c", "import sys; from mlx_lm.utils import load; "
+        [sys.executable, "-c", "import sys; from omarchy_cluster.adapters import register_adapters; register_adapters(); "
+         "from mlx_lm.utils import load; "
          "from omarchy_cluster.rank import _layer_ms; print(_layer_ms(load(sys.argv[1], lazy=True)[0]))",
          model_ref], capture_output=True, text=True, check=True).stdout
     now = float(out.split()[-1])
@@ -344,6 +347,8 @@ class Engine:
             # sharded_load insists on a group; a replica needs neither.
             if self.world == 1:
                 from mlx_lm.utils import load
+                from .adapters import register_adapters
+                register_adapters()
                 self.model, self.tok = load(self.model_ref)
                 print("rank 0 replica load done: %s" % self.model_ref, flush=True)
             else:
