@@ -56,6 +56,36 @@ def test_rank1_long_poll_gets_rank0_prompt_tokens_once(monkeypatch):
     assert res["poll_ms"] < 1000
 
 
+def test_raw_prompt_skips_the_chat_template_and_keeps_special_token_text(monkeypatch):
+    """A raw request must reach both ranks as the tokenizer's ids of the exact text:
+    the chat template would add its own system block and generation prompt, and
+    the demo needs to end the prompt on '<|start|>assistant to=user<|message|>'."""
+    monkeypatch.setattr(rank.Engine, "_boot", lambda self: None)
+    engine = rank.Engine("model", 2)
+    calls = {}
+
+    class Tok:
+        def encode(self, text, add_special_tokens=True):
+            calls["encode"] = (text, add_special_tokens)
+            return [7, 8, 9]
+
+        def apply_chat_template(self, messages, add_generation_prompt):
+            raise AssertionError("raw prompt must not use the chat template")
+
+    engine.tok, engine.model = Tok(), object()
+
+    def stream(model, tok, prompt, max_tokens, marks=None, **kw):
+        calls["prompt"] = prompt
+        yield SimpleNamespace(text="ok", prompt_tokens=len(prompt), prompt_tps=1.0,
+                              generation_tokens=1, generation_tps=1.0, peak_memory=0.0)
+
+    monkeypatch.setattr(rank, "_stream", stream)
+    text = "<|start|>assistant to=user<|message|>"
+    engine._generate(text, 3)
+    assert calls["encode"] == (text, False)
+    assert calls["prompt"] == [7, 8, 9]
+
+
 def test_step_ms_splits_decode_steps_and_skips_prefill():
     """rank0 marks: 2 prefill forwards, first token, then 2 decode steps of
     recv wait 30 ms, compute 5 ms, gather 1 ms, head 4 ms (40 ms/token)."""
