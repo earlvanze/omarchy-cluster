@@ -195,8 +195,9 @@ def rank1_worker(model_ref, engine, counts=None):
     print("rank 1 ring: rank=%d size=%d device=%s"
           % (group.rank(), group.size(), mx.default_device()), flush=True)
     model, tokenizer, _, _ = _sharded_load(model_ref, group, counts)
-    print("rank 1 sharded_load done: %s layers %d-%d" % (
-        model_ref, model.model.start_idx, model.model.end_idx - 1), flush=True)
+    print("rank %d sharded_load done: %s layers %d-%d, active %.3f GB, peak %.3f GB" % (
+        group.rank(), model_ref, model.model.start_idx, model.model.end_idx - 1,
+        mx.get_active_memory() / 1e9, mx.get_peak_memory() / 1e9), flush=True)
     print("rank 1 polling %s/prompt/wait" % engine, flush=True)
     last_id = None
     while True:
@@ -358,8 +359,9 @@ class Engine:
                 print("rank 0 ring: rank=%d size=%d device=%s"
                       % (group.rank(), group.size(), mx.default_device()), flush=True)
                 self.model, self.tok, split, layer_ms = _sharded_load(self.model_ref, group, self.counts)
-                print("rank 0 sharded_load done: %s layers %d-%d" % (
-                    self.model_ref, self.model.model.start_idx, self.model.model.end_idx - 1),
+                print("rank 0 sharded_load done: %s layers %d-%d, active %.3f GB, peak %.3f GB" % (
+                    self.model_ref, self.model.model.start_idx, self.model.model.end_idx - 1,
+                    mx.get_active_memory() / 1e9, mx.get_peak_memory() / 1e9),
                     flush=True)
                 self._start_watch(split, layer_ms)
         except Exception as e:  # noqa: BLE001 - surfaced via wait_ready
