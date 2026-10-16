@@ -59,7 +59,8 @@ def test_rank1_long_poll_gets_rank0_prompt_tokens_once(monkeypatch):
 def test_raw_prompt_skips_the_chat_template_and_keeps_special_token_text(monkeypatch):
     """A raw request must reach both ranks as the tokenizer's ids of the exact text:
     the chat template would add its own system block and generation prompt, and
-    the demo needs to end the prompt on '<|start|>assistant to=user<|message|>'."""
+    the demo needs to end the prompt on '<|start|>assistant to=user<|message|>'.
+    The engine adds no BOS: the fake tokenizer adds id 1 only when asked to add special tokens."""
     monkeypatch.setattr(rank.Engine, "_boot", lambda self: None)
     engine = rank.Engine("model", 2)
     calls = {}
@@ -67,7 +68,7 @@ def test_raw_prompt_skips_the_chat_template_and_keeps_special_token_text(monkeyp
     class Tok:
         def encode(self, text, add_special_tokens=True):
             calls["encode"] = (text, add_special_tokens)
-            return [7, 8, 9]
+            return ([1] if add_special_tokens else []) + [7, 8, 9]
 
         def apply_chat_template(self, messages, add_generation_prompt):
             raise AssertionError("raw prompt must not use the chat template")
