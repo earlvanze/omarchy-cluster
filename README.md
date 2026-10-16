@@ -273,7 +273,7 @@ mlx-community/GLM-4.5-Air-4bit --split 31,15` (rank 0 gets 31 layers).
 `m1max`. A node must hold its layers in its free memory or `serve` stops before it starts any rank. The ring needs every rank to reach its
 neighbours at one address: `--ring-ip NAME=IP` sets a node's address when its first interface is not the one the others reach (for example
 a Wi-Fi address for a laptop that has no Ethernet). The ring carries one 16 KB activation per token per hop, so a slow link costs milliseconds,
-not seconds. More than two ranks over the MLX engine has not been run on real nodes yet.
+not seconds. `--rank-env NAME=VALUE` (repeatable) sets an environment variable on every rank. More than two ranks over the MLX engine has not been run on real nodes yet.
 
 For a GGUF model over more than two machines, use the llama.cpp engine. Only
 the gateway machine needs the GGUF file. Each RPC server receives its layers

@@ -82,3 +82,35 @@ def test_a_node_without_room_for_its_layers_is_refused_before_any_rank_starts(tm
 def test_a_malformed_ring_address_is_refused(tmp_path, cluster):
     with pytest.raises(SystemExit, match="NAME=VALUE"):
         cli.cmd_serve(serve_args(make_model(tmp_path), nodes="studio,m2", split="4,4", ring_ip=["m2"]))
+
+
+def test_rank_zero_is_the_decode_tail(tmp_path, cluster):
+    plan = cli._explicit_plan(serve_args(make_model(tmp_path), nodes="studio,m2,m1max", split="2,3,3"))
+    assert plan["decode_tail"] == "studio"
+
+
+def test_a_ring_address_for_a_node_not_in_the_serve_is_refused(tmp_path, cluster):
+    with pytest.raises(SystemExit, match="m1max"):
+        cli.cmd_serve(serve_args(make_model(tmp_path), nodes="studio,m2", split="4,4", ring_ip=["m1max=10.9.9.9"]))
+    assert cluster == []
+
+
+def test_rank_env_and_the_adapter_path_reach_a_macos_rank_too(monkeypatch):
+    sent = []
+
+    class Reply:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    monkeypatch.setattr(cli, "_read_local_token", lambda: "t")
+    monkeypatch.setattr(cli.urllib.request, "urlopen", lambda req, timeout: sent.append(json.loads(req.data)) or Reply())
+    args = serve_args("m", rank_pythonpath="~/adapters", rank_env=["MLX_DISABLE_COMPILE=1"], engine_url="http://10.0.0.1:18031")
+    cli._launch_rank_via_agent({"ip": "10.0.0.1"}, 1, "m", "4,4", "[]", args, "macOS 26")
+    assert sent[0]["env"] == {"MLX_DISABLE_COMPILE": "1"}
+    assert sent[0]["pythonpath"] == "~/.local/share/omarchy-cluster/src:~/adapters"

@@ -312,17 +312,15 @@ def cmd_place(args):
 def _launch_rank_via_agent(node, rank, model, layers, hostfile_content, args, facts_os):
     py = args.python_mac if "macOS" in (facts_os or "") else args.python_linux
     tok = _read_local_token()
-    if "macOS" in (facts_os or ""):
-        pp = None
-    else:
-        pp = "~/.local/share/omarchy-cluster/src"
-        if args.rank_pythonpath:
-            pp += ":" + args.rank_pythonpath
+    pp = "~/.local/share/omarchy-cluster/src"
+    if args.rank_pythonpath:
+        pp += ":" + args.rank_pythonpath
     payload = {"rank": rank, "model": model, "layers": layers,
                "hostfile_content": hostfile_content,
                "engine_port": args.engine_port,
                "python": py,
                "pythonpath": pp,
+               "env": _name_values(getattr(args, "rank_env", None) or [], "--rank-env"),
                "gpu_turn_minutes": args.gpu_turn if "macOS" not in (facts_os or "") else 0}
     if rank:
         payload["engine_url"] = args.engine_url
@@ -397,7 +395,7 @@ def _explicit_plan(args):
             sys.exit("%s: %d layers do not fit its free memory (it holds %d)" % (name, count, cap))
         stages.append({"node": name, "max_layers": cap})
     return {"mode": "pipeline" if len(stages) > 1 else "replica", "model": info["ref"], "layers": info["layers"],
-            "ctx_tokens": args.ctx, "stages": stages, "boundaries": [], "decode_tail": names[-1]}
+            "ctx_tokens": args.ctx, "stages": stages, "boundaries": [], "decode_tail": names[0]}
 
 
 def cmd_serve(args):
@@ -424,6 +422,9 @@ def cmd_serve(args):
     nodes = {n: d for n, d in discover.discover_nodes().items() if d.get("facts")}
     rank_ips = []
     ring_ip = _name_values(getattr(args, "ring_ip", None), "--ring-ip")
+    unknown = sorted(set(ring_ip) - {s["node"] for s in stages})
+    if unknown:
+        sys.exit("--ring-ip names no node in this serve: %s" % ", ".join(unknown))
     for s in stages:
         node = nodes[s["node"]]
         if s["node"] in ring_ip:
@@ -1031,6 +1032,8 @@ def main(argv=None):
                    help="python with mlx on Linux ranks (default: each node's agent picks its own)")
     p.add_argument("--rank-pythonpath", default=None,
                    help="extra PYTHONPATH entry for ranks (e.g. mlx-lm pkg dir)")
+    p.add_argument("--rank-env", action="append", default=[], metavar="NAME=VALUE",
+                   help="environment variable set for every rank (repeatable), for example MLX_DISABLE_COMPILE=1")
     p.add_argument("--gpu-turn", type=int, default=0, metavar="MINUTES",
                    help="wrap Linux ranks in ~/bin/gpu-turn, an optional site-specific "
                         "GPU queue wrapper (off by default)")
