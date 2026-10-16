@@ -256,8 +256,8 @@ def rank_start(req):
     hostfile = os.path.join(state_dir, "ring-hostfile.json")
     with open(hostfile, "w") as f:
         f.write(req["hostfile_content"])
-    env = dict(os.environ, MLX_RANK=str(req["rank"]), MLX_HOSTFILE=hostfile,
-               HF_HUB_OFFLINE="1")
+    env = dict(os.environ, **{str(k): str(v) for k, v in (req.get("env") or {}).items()})
+    env.update(MLX_RANK=str(req["rank"]), MLX_HOSTFILE=hostfile, HF_HUB_OFFLINE="1")
     if req.get("pythonpath"):
         env["PYTHONPATH"] = ":".join(
             os.path.expanduser(p) for p in req["pythonpath"].split(":") if p)

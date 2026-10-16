@@ -312,17 +312,15 @@ def cmd_place(args):
 def _launch_rank_via_agent(node, rank, model, layers, hostfile_content, args, facts_os):
     py = args.python_mac if "macOS" in (facts_os or "") else args.python_linux
     tok = _read_local_token()
-    if "macOS" in (facts_os or ""):
-        pp = None
-    else:
-        pp = "~/.local/share/omarchy-cluster/src"
-        if args.rank_pythonpath:
-            pp += ":" + args.rank_pythonpath
+    pp = "~/.local/share/omarchy-cluster/src"
+    if args.rank_pythonpath:
+        pp += ":" + args.rank_pythonpath
     payload = {"rank": rank, "model": model, "layers": layers,
                "hostfile_content": hostfile_content,
                "engine_port": args.engine_port,
                "python": py,
                "pythonpath": pp,
+               "env": _name_values(getattr(args, "rank_env", None) or [], "--rank-env"),
                "gpu_turn_minutes": args.gpu_turn if "macOS" not in (facts_os or "") else 0}
     if rank:
         payload["engine_url"] = args.engine_url
@@ -353,6 +351,53 @@ def _read_local_token():
         return f.read().strip()
 
 
+def _name_values(items, option):
+    """NAME=VALUE option values as a dict; exits on a malformed entry."""
+    out = {}
+    for item in items or []:
+        name, sep, value = item.partition("=")
+        if not sep or not name or not value:
+            sys.exit("%s wants NAME=VALUE, got %r" % (option, item))
+        out[name] = value
+    return out
+
+
+def _first_ip(node):
+    for ifc in node["facts"]["interfaces"]:
+        for a in ifc["ips"]:
+            return a["ip"]
+    sys.exit("no IP for %s" % node.get("name", "a node"))
+
+
+def _explicit_plan(args):
+    """--nodes in rank order plus --split: no links file and no placement search. Rank r is nodes[r] and runs split[r] layers; rank 0
+    runs the last layers. Each node must hold its layers in its free memory."""
+    from . import planner
+    names = [n.strip() for n in args.nodes.split(",") if n.strip()]
+    counts = [int(c) for c in args.split.split(",")]
+    if len(names) != len(counts) or len(set(names)) != len(names):
+        sys.exit("--nodes and --split need one entry per rank and no node twice")
+    found = {n: d["facts"] for n, d in discover.discover_nodes().items() if d.get("facts")}
+    missing = [n for n in names if n not in found]
+    if missing:
+        sys.exit("node(s) not discovered: %s" % ", ".join(missing))
+    info = planner.model_info(args.model)
+    if not info:
+        sys.exit("model not found locally or in HF cache: %s" % args.model)
+    if sum(counts) != info["layers"] or min(counts) < 1:
+        sys.exit("--split %s does not cover the model's %d layers" % (args.split, info["layers"]))
+    stages = []
+    for r, (name, count) in enumerate(zip(names, counts)):
+        cap = planner.max_layers(found[name]["memory_free_bytes"], info, args.ctx)
+        first = sum(counts[r + 1:])
+        print("rank %d  %-16s layers %d-%d (%d), free memory holds %d" % (r, name, first, first + count - 1, count, cap))
+        if count > cap:
+            sys.exit("%s: %d layers do not fit its free memory (it holds %d)" % (name, count, cap))
+        stages.append({"node": name, "max_layers": cap})
+    return {"mode": "pipeline" if len(stages) > 1 else "replica", "model": info["ref"], "layers": info["layers"],
+            "ctx_tokens": args.ctx, "stages": stages, "boundaries": [], "decode_tail": names[0]}
+
+
 def cmd_serve(args):
     prev = os.path.expanduser("~/.local/state/omarchy-cluster/serve.json")
     if os.path.exists(prev):
@@ -365,21 +410,29 @@ def cmd_serve(args):
         return _serve_llamacpp(args)
     if args.engine == "sushi":
         return _serve_sushi(args)
-    plan = cmd_place(args)
+    explicit = bool(args.split and getattr(args, "nodes", None))
+    plan = _explicit_plan(args) if explicit else cmd_place(args)
     if plan["mode"] == "none":
         sys.exit("no feasible plan")
     stages = plan["stages"]
-    if len(stages) > 2:
-        sys.exit("serve currently supports 2-rank pipelines (ring hop protocol); "
-                 "got %d stages" % len(stages))
+    if len(stages) > 2 and not explicit:
+        sys.exit("more than 2 ranks needs --nodes in rank order and --split (rank 0 runs the last layers)")
     hostfile = os.path.expanduser("~/.local/state/omarchy-cluster/ring-hostfile.json")
     os.makedirs(os.path.dirname(hostfile), exist_ok=True)
     nodes = {n: d for n, d in discover.discover_nodes().items() if d.get("facts")}
     rank_ips = []
+    ring_ip = _name_values(getattr(args, "ring_ip", None), "--ring-ip")
+    unknown = sorted(set(ring_ip) - {s["node"] for s in stages})
+    if unknown:
+        sys.exit("--ring-ip names no node in this serve: %s" % ", ".join(unknown))
     for s in stages:
         node = nodes[s["node"]]
-        if len(stages) == 1:
+        if s["node"] in ring_ip:
+            cand = ring_ip[s["node"]]
+        elif len(stages) == 1:
             cand = "127.0.0.1"
+        elif explicit and len(stages) > 2:
+            cand = _first_ip(node)
         else:
             cand = _pick_route_ip(node, stages, s["node"])
         rank_ips.append(cand)
@@ -964,7 +1017,12 @@ def main(argv=None):
     p.add_argument("--ctx", type=int, default=2048)
     p.add_argument("--links", default=None)
     p.add_argument("--no-decode", action="append", default=[])
-    p.add_argument("--nodes", default=None, metavar="N1,N2")
+    p.add_argument("--nodes", default=None, metavar="N1,N2",
+                   help="mlx engine: with --split, the nodes in rank order (rank 0 runs the last layers); "
+                        "no placement search or links file, any number of ranks")
+    p.add_argument("--ring-ip", action="append", default=[], metavar="NAME=IP",
+                   help="mlx engine: the ring address of NAME (a node whose neighbours reach it on another "
+                        "address than its first interface, for example a Wi-Fi address; repeat)")
     p.add_argument("--stages", type=int, default=None)
     p.add_argument("--port", type=int, default=8020)
     p.add_argument("--engine-port", type=int, default=8031)
@@ -974,6 +1032,8 @@ def main(argv=None):
                    help="python with mlx on Linux ranks (default: each node's agent picks its own)")
     p.add_argument("--rank-pythonpath", default=None,
                    help="extra PYTHONPATH entry for ranks (e.g. mlx-lm pkg dir)")
+    p.add_argument("--rank-env", action="append", default=[], metavar="NAME=VALUE",
+                   help="environment variable set for every rank (repeatable), for example MLX_DISABLE_COMPILE=1")
     p.add_argument("--gpu-turn", type=int, default=0, metavar="MINUTES",
                    help="wrap Linux ranks in ~/bin/gpu-turn, an optional site-specific "
                         "GPU queue wrapper (off by default)")
