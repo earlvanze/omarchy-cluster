@@ -268,6 +268,13 @@ For a model bigger than one node, pick the split yourself so a machine you use
 for other work keeps free memory, for example `serve
 mlx-community/GLM-4.5-Air-4bit --split 31,15` (rank 0 gets 31 layers).
 
+`--nodes` with `--split` names the nodes in rank order and starts one rank on each, any number: no links file and no placement search. Rank 0
+(the engine) runs the last layers, so `--nodes studio,m2,m1max --split 25,21,16` puts layers 37-61 on `studio`, 16-36 on `m2` and 0-15 on
+`m1max`. A node must hold its layers in its free memory or `serve` stops before it starts any rank. The ring needs every rank to reach its
+neighbours at one address: `--ring-ip NAME=IP` sets a node's address when its first interface is not the one the others reach (for example
+a Wi-Fi address for a laptop that has no Ethernet). The ring carries one 16 KB activation per token per hop, so a slow link costs milliseconds,
+not seconds. More than two ranks over the MLX engine has not been run on real nodes yet.
+
 For a GGUF model over more than two machines, use the llama.cpp engine. Only
 the gateway machine needs the GGUF file. Each RPC server receives its layers
 over the network at load (`--rpc-cache` keeps them on its disk for the next
