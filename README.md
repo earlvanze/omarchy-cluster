@@ -234,6 +234,11 @@ MLX Python: `$OMARCHY_CLUSTER_PYTHON` if set, else the omarchy-mlx venv if
 present, else the Python the agent runs in. `serve --python-mac` and
 `--python-linux` override that.
 
+## Quickstart: Muse Spark Open on MLX
+
+Muse Spark Open (816B-A42B) runs on MLX across four Apple Silicon machines (a Mac Studio plus three Omarchy Linux laptops), all 62 layers on GPU, at about 2.0-2.2 tok/s decode with about 26 s TTFT.
+Model: [joshuaswarren/Muse-Spark-Open-816B-A42B-MLX-2bit-mixed](https://huggingface.co/joshuaswarren/Muse-Spark-Open-816B-A42B-MLX-2bit-mixed). Recipe and receipt: [receipts/2026-10-16-muse-spark-mlx-full62](receipts/2026-10-16-muse-spark-mlx-full62/README.md).
+
 ## Quickstart: two machines
 
 All nodes need the same token. Copy it to the second node:
