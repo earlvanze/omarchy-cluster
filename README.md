@@ -503,3 +503,11 @@ python3 -m pytest tests/
 ## License
 
 MIT.
+## Earl Co fork note: host + M4 Mac Mini
+
+Use this fork for the two-host Apple Silicon run without the upstream `exo`
+RDMA dependency. Connect both machines on one Thunderbolt/LAN route, keep the
+same agent token on each, and use the stock two-rank MLX engine. On this
+Linux Apple Silicon host, install `omarchy-mlx` through its own package path
+and run the agent persistently outside `/tmp`. The Mac Mini may provide Metal
+MLX ranks.
