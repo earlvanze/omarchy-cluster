@@ -140,7 +140,7 @@ def discover_nodes(mdns_timeout=4.0, hostfile=HOSTFILE):
     local = platform.node().split(".")[0] or "localhost"
     nodes.setdefault(local, {"name": local, "host": local, "ip": "127.0.0.1",
                              "ips": ["127.0.0.1"], "port": DEFAULT_PORT, "source": "local"})
-    for node in nodes.values():
+    for name, node in nodes.items():
         node["facts"] = node["error"] = None
         best = None  # (score, ip, facts) - prefer the fastest interface that answers
         for ip in node.get("ips") or [node.get("ip")]:
@@ -159,6 +159,7 @@ def discover_nodes(mdns_timeout=4.0, hostfile=HOSTFILE):
         if best:
             node["ip"] = best[1]
             node["facts"] = best[2]
+            node["facts"]["name"] = name
             # Hostfile entries are operator-selected routes; do not re-ride them
             # with a "faster" interface discovered in the agent's facts (Docker
             # bridges can report fake 10 Gbps speeds and poison control-plane calls).
