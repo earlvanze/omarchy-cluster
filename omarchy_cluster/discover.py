@@ -159,6 +159,11 @@ def discover_nodes(mdns_timeout=4.0, hostfile=HOSTFILE):
         if best:
             node["ip"] = best[1]
             node["facts"] = best[2]
+            # Hostfile entries are operator-selected routes; do not re-ride them
+            # with a "faster" interface discovered in the agent's facts (Docker
+            # bridges can report fake 10 Gbps speeds and poison control-plane calls).
+            if node.get("source") == "hostfile":
+                continue
             # Control plane rides the fastest interface that also answers.
             ranked = sorted(
                 ((ifc.get("speed_mbps") or 0, not ifc.get("wireless"), a["ip"])
